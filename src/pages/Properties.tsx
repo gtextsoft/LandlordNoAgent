@@ -16,6 +16,8 @@ import { useToast } from "@/hooks/use-toast";
 import EnhancedSearch from "@/components/EnhancedSearch";
 import ImprovedPropertyCard from "@/components/ImprovedPropertyCard";
 import PropertyMapView from "@/components/PropertyMapView";
+import MobileOptimizedPropertyCard from "@/components/MobileOptimizedPropertyCard";
+import ResponsiveGrid from "@/components/ResponsiveGrid";
 
 const Properties = () => {
   const [properties, setProperties] = useState<Property[]>([]);
@@ -357,7 +359,8 @@ const Properties = () => {
           ) : (
             /* List View with Improved Property Cards */
             <>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+              {/* Desktop and Tablet View */}
+              <div className="hidden md:grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                 {currentProperties.map((property) => (
                   <ImprovedPropertyCard
                     key={property.id}
@@ -367,6 +370,22 @@ const Properties = () => {
                     showVirtualTour={false}
                   />
                 ))}
+              </div>
+
+              {/* Mobile View */}
+              <div className="md:hidden">
+                <ResponsiveGrid mobileColumns={1} gap="md">
+                  {currentProperties.map((property) => (
+                    <MobileOptimizedPropertyCard
+                      key={property.id}
+                      property={property}
+                      onSave={() => toggleSavedProperty(property.id)}
+                      isSaved={savedProperties.includes(property.id)}
+                      onContact={() => console.log('Contact:', property.id)}
+                      onShare={() => console.log('Share:', property.id)}
+                    />
+                  ))}
+                </ResponsiveGrid>
               </div>
 
               {/* Pagination */}

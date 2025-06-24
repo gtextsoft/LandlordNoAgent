@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -8,6 +7,8 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { ArrowLeft, Shield, Mail, Lock } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/lib/supabase";
+import { handleError, handleSuccess } from "@/utils/shared";
 
 const AdminLogin = () => {
   const [email, setEmail] = useState("");
@@ -33,32 +34,84 @@ const AdminLogin = () => {
     }
   }, [profile, navigate, hasRole, toast]);
 
-  const handleSignIn = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
     try {
-      const { error } = await signIn(email, password);
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
 
-      if (error) {
-        if (error.message.includes('Invalid login credentials')) {
-          toast({
-            title: "Invalid credentials",
-            description: "Please check your email and password.",
-            variant: "destructive"
-          });
-        } else {
-          throw error;
+      if (error) throw error;
+
+      if (data.user) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', data.user.id)
+          .single();
+
+        if (!profile || profile.role !== 'admin') {
+          await supabase.auth.signOut();
+          throw new Error("You don't have admin privileges.");
         }
+
+        navigate('/admin');
+        handleSuccess(toast, "Welcome to the admin panel!");
       }
     } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to sign in. Please try again.",
-        variant: "destructive"
-      });
+      handleError(error, toast, error.message || 'Login failed');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Temporary admin creation function (remove after first admin is created)
+  const createFirstAdmin = async () => {
+    try {
+      const adminEmail = "admin@landlord.com";
+      const adminPassword = "Admin123!"; // Change this password!
+      
+      console.log('Creating first admin account...');
+      
+      // Create auth user
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: adminEmail,
+        password: adminPassword,
+      });
+
+      if (authError) {
+        console.error('Auth error:', authError);
+        throw authError;
+      }
+
+      if (!authData.user) {
+        throw new Error('Failed to create user');
+      }
+
+      console.log('Auth user created, now updating profile...');
+
+      // Update profile to admin role
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .update({ 
+          role: 'admin',
+          full_name: 'System Administrator'
+        })
+        .eq('id', authData.user.id);
+
+      if (profileError) {
+        console.error('Profile error:', profileError);
+        throw profileError;
+      }
+
+      alert(`Admin account created successfully!\nEmail: ${adminEmail}\nPassword: ${adminPassword}\n\nPlease change the password after first login!`);
+      
+    } catch (error: any) {
+      console.error('Error creating admin:', error);
+      alert(`Error creating admin: ${error.message}`);
     }
   };
 
@@ -83,7 +136,7 @@ const AdminLogin = () => {
             </CardDescription>
           </CardHeader>
 
-          <form onSubmit={handleSignIn}>
+          <form onSubmit={handleSubmit}>
             <CardContent className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="email" className="text-red-200">Admin Email</Label>
@@ -119,17 +172,38 @@ const AdminLogin = () => {
             </CardContent>
 
             <CardFooter>
-              <Button
-                type="submit"
-                className="w-full bg-gradient-to-r from-red-600 to-red-800 hover:from-red-700 hover:to-red-900 h-11"
+              <Button 
+                type="submit" 
+                className="w-full bg-red-600 hover:bg-red-700 text-white py-3 text-lg font-semibold"
                 disabled={loading}
               >
                 {loading ? (
-                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                  <>
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                    Signing In...
+                  </>
                 ) : (
                   "Access Admin Panel"
                 )}
               </Button>
+              
+              {/* Temporary Admin Creation Button - Remove after first admin is created */}
+              <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                <p className="text-yellow-800 text-sm mb-2">
+                  <strong>First Time Setup:</strong> Click below to create the first admin account
+                </p>
+                <Button 
+                  type="button"
+                  variant="outline"
+                  onClick={createFirstAdmin}
+                  className="w-full border-yellow-400 text-yellow-700 hover:bg-yellow-50"
+                >
+                  Create First Admin Account
+                </Button>
+                <p className="text-xs text-yellow-600 mt-2">
+                  This will create: admin@landlord.com with password: Admin123!
+                </p>
+              </div>
             </CardFooter>
           </form>
         </Card>

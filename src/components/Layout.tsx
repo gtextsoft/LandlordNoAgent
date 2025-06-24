@@ -25,6 +25,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent } from "@/components/ui/card";
 import EnhancedNavigation from "@/components/EnhancedNavigation";
 import UserOnboarding from "@/components/UserOnboarding";
+import MobileNavigation from "@/components/MobileNavigation";
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -846,11 +847,8 @@ const Layout = ({ children, showNav = true }: LayoutProps) => {
           showNav && profile ? 'lg:ml-64' : ''
         ].join(' ')}
       >
-        {/* Mobile Header */}
-        {showNav && profile && <MobileHeader />}
-
-        {/* Mobile Menu */}
-        {showNav && profile && <MobileMenu />}
+        {/* Mobile Navigation */}
+        <MobileNavigation unreadCount={unreadCount} />
 
         {/* Main Content */}
         <main className="flex-1">
