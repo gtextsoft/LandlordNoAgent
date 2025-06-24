@@ -33,7 +33,7 @@ const queryClient = new QueryClient({
 });
 
 function AppContent() {
-  const { user, loading } = useAuth();
+  const { user, loading, hasRole } = useAuth();
 
   if (loading) {
     return (
@@ -53,7 +53,16 @@ function AppContent() {
         <Route path="/admin/login" element={<AdminLogin />} />
         <Route path="/contact" element={<Contact />} />
         <Route path="/properties" element={<Properties />} />
-        <Route path="/" element={user ? <Properties /> : <LandingPage />} />
+        <Route path="/landing" element={<LandingPage />} />
+        <Route path="/" element={
+          user ? (
+            hasRole('landlord') ? 
+            <Navigate to="/landlord" replace /> : 
+            <Navigate to="/properties" replace />
+          ) : (
+            <Navigate to="/landing" replace />
+          )
+        } />
         <Route
           path="/saved-properties"
           element={
@@ -70,6 +79,7 @@ function AppContent() {
             </ProtectedRoute>
           }
         />
+
         <Route
           path="/landlord"
           element={

@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent } from "@/components/ui/card";
-import { Search, MapPin, Home, Bed, Bath, Heart, ChevronLeft, ChevronRight, MessageCircle } from "lucide-react";
+import { Search, MapPin, Home, Bed, Bath, Heart, ChevronLeft, ChevronRight, MessageCircle, Map, List } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useSavedProperties } from "@/hooks/useSavedProperties";
 import { supabase, Property } from "@/lib/supabase";
@@ -13,6 +13,9 @@ import Layout from "@/components/Layout";
 import { useLoadingState } from "@/hooks/useLoadingState";
 import { handleError } from "@/utils/shared";
 import { useToast } from "@/hooks/use-toast";
+import EnhancedSearch from "@/components/EnhancedSearch";
+import ImprovedPropertyCard from "@/components/ImprovedPropertyCard";
+import PropertyMapView from "@/components/PropertyMapView";
 
 const Properties = () => {
   const [properties, setProperties] = useState<Property[]>([]);
@@ -24,6 +27,9 @@ const Properties = () => {
   const [bedroomsFilter, setBedroomsFilter] = useState("all");
   const [filteredProperties, setFilteredProperties] = useState<Property[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
+  const [viewMode, setViewMode] = useState<'list' | 'map'>('list');
+  const [selectedProperty, setSelectedProperty] = useState<Property | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
   const propertiesPerPage = 15;
   const { profile } = useAuth();
   const { savedProperties, toggleSavedProperty } = useSavedProperties();
@@ -35,7 +41,7 @@ const Properties = () => {
 
   useEffect(() => {
     filterProperties();
-  }, [locationFilter, propertyTypeFilter, priceRangeFilter, bedroomsFilter, properties]);
+  }, [locationFilter, propertyTypeFilter, priceRangeFilter, bedroomsFilter, properties, searchQuery]);
 
   const fetchProperties = async () => {
     try {
@@ -80,6 +86,15 @@ const Properties = () => {
   const filterProperties = () => {
     let filtered = properties;
 
+    // Search query filter
+    if (searchQuery) {
+      filtered = filtered.filter(property =>
+        property.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        property.location?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        property.description?.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+    }
+
     if (locationFilter) {
       filtered = filtered.filter(property =>
         property.location?.toLowerCase().includes(locationFilter.toLowerCase())
@@ -118,6 +133,26 @@ const Properties = () => {
 
     setFilteredProperties(filtered);
     setCurrentPage(1);
+  };
+
+  // Enhanced search handlers
+  const handleSearch = (query: string, filters: any) => {
+    setSearchQuery(query);
+    // Apply enhanced filters
+    if (filters.location) setLocationFilter(filters.location);
+    if (filters.propertyType) setPropertyTypeFilter(filters.propertyType);
+    if (filters.bedrooms) setBedroomsFilter(filters.bedrooms);
+    if (filters.bathrooms) {
+      // Handle bathrooms filter if needed
+    }
+    // Handle price range
+    if (filters.priceRange && filters.priceRange[0] > 0 || filters.priceRange[1] < 5000000) {
+      setPriceRangeFilter(`${filters.priceRange[0]}-${filters.priceRange[1]}`);
+    }
+  };
+
+  const handlePropertySelect = (property: Property) => {
+    setSelectedProperty(property);
   };
 
   const totalPages = Math.ceil(filteredProperties.length / propertiesPerPage);
@@ -254,173 +289,83 @@ const Properties = () => {
         </section>
       )}
 
-      {/* Search Filters */}
+      {/* Enhanced Search Filters */}
       <section className="bg-gray-50 py-8 border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="bg-white rounded-lg shadow-sm p-6">
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-              <div className="relative">
-                <label className="block text-sm font-medium text-gray-700 mb-2">Location</label>
-                <div className="relative">
-                  <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                  <Input
-                    placeholder="Enter your location"
-                    className="pl-10 bg-gray-50 border-gray-200"
-                    value={locationFilter}
-                    onChange={(e) => setLocationFilter(e.target.value)}
-                  />
-                </div>
-              </div>
+          <EnhancedSearch 
+            onSearch={handleSearch}
+            placeholder="Search properties by location, type, or features..."
+            showFilters={true}
+          />
+        </div>
+      </section>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Property Type</label>
-                <div className="relative">
-                  <Home className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 z-10" />
-                  <Select value={propertyTypeFilter} onValueChange={setPropertyTypeFilter}>
-                    <SelectTrigger className="pl-10 bg-gray-50 border-gray-200">
-                      <SelectValue placeholder="Apartment" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Types</SelectItem>
-                      <SelectItem value="studio">Studio</SelectItem>
-                      <SelectItem value="apartment">Apartment</SelectItem>
-                      <SelectItem value="house">House</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Price Range</label>
-                <Select value={priceRangeFilter} onValueChange={setPriceRangeFilter}>
-                  <SelectTrigger className="bg-gray-50 border-gray-200">
-                    <SelectValue placeholder="1000 - 25000" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Prices</SelectItem>
-                    <SelectItem value="0-1000">Under $1,000</SelectItem>
-                    <SelectItem value="1000-2000">$1,000 - $2,000</SelectItem>
-                    <SelectItem value="2000-3000">$2,000 - $3,000</SelectItem>
-                    <SelectItem value="3000-5000">$3,000 - $5,000</SelectItem>
-                    <SelectItem value="5000">$5,000+</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Bedrooms</label>
-                <div className="relative">
-                  <Bed className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 z-10" />
-                  <Select value={bedroomsFilter} onValueChange={setBedroomsFilter}>
-                    <SelectTrigger className="pl-10 bg-gray-50 border-gray-200">
-                      <SelectValue placeholder="Studio" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Any</SelectItem>
-                      <SelectItem value="studio">Studio</SelectItem>
-                      <SelectItem value="1">1 Bedroom</SelectItem>
-                      <SelectItem value="2">2 Bedrooms</SelectItem>
-                      <SelectItem value="3">3 Bedrooms</SelectItem>
-                      <SelectItem value="4">4+ Bedrooms</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="flex items-end">
-                <Button className="w-full bg-teal-700 hover:bg-teal-800 text-white font-medium py-3">
-                  <Search className="w-4 h-4 mr-2" />
-                  Find a Home
+      {/* Properties Section with View Toggle */}
+      <section className="py-12">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          {/* Header with View Toggle */}
+          <div className="flex items-center justify-between mb-8">
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900">
+                {filteredProperties.length} Properties Found
+              </h2>
+              <p className="text-gray-600 mt-1">
+                Showing results for your search criteria
+              </p>
+            </div>
+            
+            {/* View Mode Toggle */}
+            <div className="flex items-center space-x-4">
+              <div className="flex rounded-lg bg-gray-100 p-1">
+                <Button
+                  variant={viewMode === 'list' ? 'default' : 'ghost'}
+                  size="sm"
+                  onClick={() => setViewMode('list')}
+                  className="flex items-center px-4"
+                >
+                  <List className="w-4 h-4 mr-2" />
+                  List
+                </Button>
+                <Button
+                  variant={viewMode === 'map' ? 'default' : 'ghost'}
+                  size="sm"
+                  onClick={() => setViewMode('map')}
+                  className="flex items-center px-4"
+                >
+                  <Map className="w-4 h-4 mr-2" />
+                  Map
                 </Button>
               </div>
             </div>
           </div>
-        </div>
-      </section>
 
-      {/* Properties Grid */}
-      <section className="py-12">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           {filteredProperties.length === 0 ? (
             <div className="text-center py-16">
               <Home className="w-16 h-16 text-gray-400 mx-auto mb-4" />
               <h3 className="text-xl font-semibold text-gray-900 mb-2">No properties found</h3>
               <p className="text-gray-600">Try adjusting your search filters or check back later.</p>
             </div>
+          ) : viewMode === 'map' ? (
+            /* Map View */
+            <div className="h-screen -mx-4 sm:-mx-6 lg:-mx-8">
+              <PropertyMapView
+                properties={filteredProperties}
+                onPropertySelect={handlePropertySelect}
+                selectedProperty={selectedProperty}
+              />
+            </div>
           ) : (
+            /* List View with Improved Property Cards */
             <>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                 {currentProperties.map((property) => (
-                  <div key={property.id} className="bg-white rounded-xl shadow-sm hover:shadow-lg transition-shadow duration-300">
-                    <div className="relative">
-                      <img
-                        src={property.photo_url || "/placeholder.svg"}
-                        alt={property.title}
-                        className="w-full h-64 object-cover rounded-t-xl"
-                      />
-                      <button
-                        onClick={() => profile && toggleSavedProperty(property.id)}
-                        className="absolute top-3 right-3 p-2 bg-white/90 backdrop-blur-sm rounded-full hover:bg-white transition-colors shadow-sm"
-                      >
-                        <Heart 
-                          className={`w-4 h-4 ${
-                            savedProperties.includes(property.id) 
-                              ? 'text-red-500 fill-current' 
-                              : 'text-gray-600'
-                          }`} 
-                        />
-                      </button>
-                    </div>
-                    
-                    <div className="p-6">
-                      <div className="flex items-center justify-between mb-2">
-                        <h3 className="font-semibold text-gray-900 text-lg">
-                          {property.bedrooms || 0}-Bedroom Apartment in Lekki
-                        </h3>
-                      </div>
-                      
-                      <div className="flex items-center text-gray-500 text-sm mb-3">
-                        <MapPin className="w-4 h-4 mr-1" />
-                        <span>Lekki Phase 1, Lagos, Nigeria</span>
-                      </div>
-                      
-                      <div className="text-2xl font-bold text-gray-900 mb-4">
-                        ₦ {property.price.toLocaleString()}
-                        <span className="text-sm text-gray-500 font-normal"> per year</span>
-                      </div>
-                      
-                      <div className="flex items-center justify-between text-sm text-gray-600 mb-4">
-                        <div className="flex items-center space-x-4">
-                          <div className="flex items-center">
-                            <Bed className="w-4 h-4 mr-1" />
-                            <span>{property.bedrooms || 0}</span>
-                          </div>
-                          <div className="flex items-center">
-                            <Bath className="w-4 h-4 mr-1" />
-                            <span>{property.bathrooms || 1}</span>
-                          </div>
-                          <div className="flex items-center">
-                            <Home className="w-4 h-4 mr-1" />
-                            <span>WiFi</span>
-                          </div>
-                          <div className="flex items-center">
-                            <span>🅿️</span>
-                            <span className="ml-1">Solar</span>
-                          </div>
-                          <div className="flex items-center">
-                            <span>🏠</span>
-                            <span className="ml-1">Pool</span>
-                          </div>
-                        </div>
-                      </div>
-                      
-                      <Link to={`/property/${property.id}`}>
-                        <Button variant="outline" className="w-full border-gray-300 text-gray-700 hover:bg-gray-50">
-                          View More Detail
-                        </Button>
-                      </Link>
-                    </div>
-                  </div>
+                  <ImprovedPropertyCard
+                    key={property.id}
+                    property={property}
+                    variant="default"
+                    showActions={true}
+                    showVirtualTour={false}
+                  />
                 ))}
               </div>
 

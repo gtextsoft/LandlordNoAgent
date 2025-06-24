@@ -7,6 +7,7 @@ import { useLoadingState } from "@/hooks/useLoadingState";
 import { handleError, handleSuccess } from "@/utils/shared";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import Layout from "@/components/Layout";
+import { debugDatabase, createSampleData } from "@/utils/databaseDebug";
 
 import DashboardStats from "@/components/landlord/DashboardStats";
 import QuickActions from "@/components/landlord/QuickActions";
@@ -51,10 +52,16 @@ const LandlordDashboard = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
+    console.log('🔐 Auth check - Profile:', profile);
+    console.log('🔐 Auth check - Has landlord role:', hasRole('landlord'));
+    
     if (!profile || !hasRole('landlord')) {
+      console.log('❌ User not authorized as landlord, redirecting to home');
       navigate('/');
       return;
     }
+    
+    console.log('✅ User authorized as landlord, fetching dashboard data');
     fetchDashboardData();
   }, [profile, navigate, hasRole]);
 
@@ -72,6 +79,8 @@ const LandlordDashboard = () => {
 
     try {
       setPropertiesLoading(true);
+      console.log('🏠 Fetching properties for landlord:', profile.id);
+      
       const { data, error } = await supabase
         .from('properties')
         .select(`
@@ -81,13 +90,23 @@ const LandlordDashboard = () => {
         .eq('landlord_id', profile.id)
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Error fetching properties:', error);
+        throw error;
+      }
 
+      console.log('✅ Properties fetched:', data);
       setProperties((data as any) || []);
       
       // Calculate basic stats from properties
       const activeProperties = data?.filter(p => p.status === 'active').length || 0;
       const totalRevenue = data?.reduce((sum, p) => sum + (p.price || 0), 0) || 0;
+      
+      console.log('📊 Stats calculated:', {
+        totalProperties: data?.length || 0,
+        activeProperties,
+        monthlyRevenue: Math.round(totalRevenue / 12)
+      });
       
       setStats(prevStats => ({
         ...prevStats,
@@ -96,6 +115,7 @@ const LandlordDashboard = () => {
         monthlyRevenue: Math.round(totalRevenue / 12), // Convert yearly to monthly
       }));
     } catch (error: any) {
+      console.error('❌ Property fetch error:', error);
       handleError(error, toast, 'Failed to load properties');
     } finally {
       setPropertiesLoading(false);
@@ -243,8 +263,6 @@ const LandlordDashboard = () => {
     }
   };
 
-
-
   // Calculate occupancy rate
   const occupancyRate = stats.totalProperties > 0 
     ? Math.round((stats.activeProperties / stats.totalProperties) * 100)
@@ -282,6 +300,30 @@ const LandlordDashboard = () => {
             Welcome back, {profile?.full_name || 'Landlord'}!
           </h2>
           <p className="text-gray-600">Manage your properties and track your rental business.</p>
+          
+          {/* Debug Panel - only show if no properties */}
+          {properties.length === 0 && (
+            <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <h3 className="font-medium text-yellow-800 mb-2">🔧 Debug Mode (No Properties Found)</h3>
+              <p className="text-sm text-yellow-700 mb-3">
+                It looks like you don't have any properties yet. This might be why you're seeing placeholder data.
+              </p>
+              <div className="flex gap-2">
+                <button
+                  onClick={debugDatabase}
+                  className="px-3 py-1 bg-yellow-600 text-white text-sm rounded hover:bg-yellow-700"
+                >
+                  Debug Database
+                </button>
+                <button
+                  onClick={createSampleData}
+                  className="px-3 py-1 bg-green-600 text-white text-sm rounded hover:bg-green-700"
+                >
+                  Create Sample Data
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Navigation Tabs */}

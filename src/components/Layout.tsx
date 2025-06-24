@@ -23,6 +23,8 @@ import { useState, useEffect } from "react";
 import { NotificationService, Notification as DBNotification } from "@/services/notificationService";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent } from "@/components/ui/card";
+import EnhancedNavigation from "@/components/EnhancedNavigation";
+import UserOnboarding from "@/components/UserOnboarding";
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -75,6 +77,21 @@ const Layout = ({ children, showNav = true }: LayoutProps) => {
     compactMode: false,
     animations: true
   });
+
+  // Onboarding state
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [userType, setUserType] = useState<'renter' | 'landlord'>('renter');
+
+  // Check if user needs onboarding
+  useEffect(() => {
+    if (profile && !localStorage.getItem('onboardingCompleted') && !localStorage.getItem('onboardingSkipped')) {
+      const shouldShowOnboarding = !profile.full_name;
+      if (shouldShowOnboarding) {
+        setUserType(hasRole('landlord') ? 'landlord' : 'renter');
+        setShowOnboarding(true);
+      }
+    }
+  }, [profile, hasRole]);
 
   const isActive = (path: string) => location.pathname === path;
 
@@ -470,6 +487,86 @@ const Layout = ({ children, showNav = true }: LayoutProps) => {
     </>
   );
 
+  // Handle onboarding completion
+  const handleOnboardingComplete = () => {
+    setShowOnboarding(false);
+    toast({
+      title: "Welcome!",
+      description: "Your profile setup is complete.",
+    });
+  };
+
+  // Use enhanced navigation only for landing page when not authenticated
+  const isLandingPage = location.pathname === '/landing';
+  const useEnhancedNav = showNav && (isLandingPage && !profile);
+
+  if (useEnhancedNav) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+        <EnhancedNavigation 
+          variant={isLandingPage ? 'landing' : 'app'}
+          showSearch={!isLandingPage}
+          showBreadcrumbs={!isLandingPage}
+        />
+        <main>{children}</main>
+        
+        {/* Onboarding Modal */}
+        <UserOnboarding
+          isOpen={showOnboarding}
+          onClose={() => setShowOnboarding(false)}
+          onComplete={handleOnboardingComplete}
+          userType={userType}
+        />
+        
+        {/* Footer */}
+        <footer className="bg-white/80 backdrop-blur-sm border-t py-8 mt-auto">
+          <div className="container mx-auto px-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+              <div className="space-y-4">
+                <div className="flex items-center space-x-2">
+                  <div className="w-8 h-8 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-lg flex items-center justify-center">
+                    <span className="text-white font-bold text-sm">FL</span>
+                  </div>
+                  <span className="text-xl font-bold text-gray-900">LandlordNoAgent</span>
+                </div>
+                <p className="text-gray-600">
+                  Connecting landlords and renters seamlessly.
+                </p>
+              </div>
+              <div>
+                <h4 className="font-semibold text-gray-900 mb-4">For Renters</h4>
+                <ul className="space-y-2">
+                  <li><Link to="/properties" className="text-gray-600 hover:text-blue-600">Browse Properties</Link></li>
+                  <li><Link to="/login" className="text-gray-600 hover:text-blue-600">Save Favorites</Link></li>
+                  <li><Link to="/login" className="text-gray-600 hover:text-blue-600">Contact Landlords</Link></li>
+                </ul>
+              </div>
+              <div>
+                <h4 className="font-semibold text-gray-900 mb-4">For Landlords</h4>
+                <ul className="space-y-2">
+                  <li><Link to="/login" className="text-gray-600 hover:text-blue-600">List Property</Link></li>
+                  <li><Link to="/login" className="text-gray-600 hover:text-blue-600">Manage Listings</Link></li>
+                  <li><Link to="/login" className="text-gray-600 hover:text-blue-600">Track Analytics</Link></li>
+                </ul>
+              </div>
+              <div>
+                <h4 className="font-semibold text-gray-900 mb-4">Support</h4>
+                <ul className="space-y-2">
+                  <li><Link to="#" className="text-gray-600 hover:text-blue-600">Help Center</Link></li>
+                  <li><Link to="/contact" className="text-gray-600 hover:text-blue-600">Contact Us</Link></li>
+                  <li><Link to="#" className="text-gray-600 hover:text-blue-600">Privacy Policy</Link></li>
+                </ul>
+              </div>
+            </div>
+            <div className="border-t mt-8 pt-8 text-center text-gray-600">
+              <p>&copy; 2025 Gtext Holding. All rights reserved.</p>
+            </div>
+          </div>
+        </footer>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex">
       {/* Desktop Sidebar for authenticated users */}
@@ -759,6 +856,14 @@ const Layout = ({ children, showNav = true }: LayoutProps) => {
         <main className="flex-1">
           {children}
         </main>
+
+        {/* Onboarding Modal */}
+        <UserOnboarding
+          isOpen={showOnboarding}
+          onClose={() => setShowOnboarding(false)}
+          onComplete={handleOnboardingComplete}
+          userType={userType}
+        />
 
         {/* Footer */}
         <footer className="bg-white/80 backdrop-blur-sm border-t py-8 mt-auto">

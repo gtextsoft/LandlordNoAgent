@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import EnhancedHero from "@/components/EnhancedHero";
 import { 
   Search, 
   Calendar, 
@@ -129,93 +130,8 @@ const LandingPage = () => {
         </div>
       </header>
 
-      {/* Hero Section - Matching the exact design */}
-      <section className="relative min-h-[85vh] flex items-center justify-center">
-        {/* Background Image */}
-        <div 
-          className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-          style={{
-            backgroundImage: "url('/BG.png')",
-            backgroundPosition: "center 10%"
-          }}
-        />
-        {/* Dark overlay */}
-        <div className="absolute inset-0 bg-black/30" />
-        
-        <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-2 leading-tight">
-            Rent Smarter. No Agents.
-          </h1>
-          <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-8 leading-tight">
-            No Extra Fees.
-          </h2>
-          <p className="text-lg md:text-xl text-white/90 mb-12 max-w-2xl mx-auto">
-            Connect directly with property owners and find your perfect rental home without middleman fees or complications.
-          </p>
-
-          {/* Search Bar - Clean white design exactly like image */}
-          <div className="bg-white rounded-full shadow-2xl p-2 max-w-5xl mx-auto">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-0">
-              <div className="relative">
-                <div className="flex items-center px-6 py-4">
-                  <div className="flex-1">
-                    <p className="text-xs font-semibold text-gray-900 mb-1">Where</p>
-                    <input 
-                      placeholder="Search destinations" 
-                      className="border-0 p-0 text-sm text-gray-600 placeholder-gray-400 focus:ring-0 shadow-none bg-transparent outline-none w-full"
-                    />
-                  </div>
-                </div>
-              </div>
-              
-              <div className="relative border-l border-gray-200">
-                <div className="flex items-center px-6 py-4">
-                  <div className="flex-1">
-                    <p className="text-xs font-semibold text-gray-900 mb-1">Check in</p>
-                    <input 
-                      placeholder="Add dates" 
-                      type="text"
-                      className="border-0 p-0 text-sm text-gray-600 placeholder-gray-400 focus:ring-0 shadow-none bg-transparent outline-none w-full"
-                    />
-                  </div>
-                </div>
-              </div>
-              
-              <div className="relative border-l border-gray-200">
-                <div className="flex items-center px-6 py-4">
-                  <div className="flex-1">
-                    <p className="text-xs font-semibold text-gray-900 mb-1">Check out</p>
-                    <input 
-                      placeholder="Add dates" 
-                      type="text"
-                      className="border-0 p-0 text-sm text-gray-600 placeholder-gray-400 focus:ring-0 shadow-none bg-transparent outline-none w-full"
-                    />
-                  </div>
-                </div>
-              </div>
-              
-              <div className="relative border-l border-gray-200">
-                <div className="flex items-center px-6 py-4">
-                  <div className="flex-1">
-                    <p className="text-xs font-semibold text-gray-900 mb-1">Who</p>
-                    <div className="flex items-center">
-                      <input 
-                        placeholder="Add guests" 
-                        readOnly
-                        className="border-0 p-0 text-sm text-gray-600 placeholder-gray-400 focus:ring-0 shadow-none bg-transparent outline-none w-full cursor-pointer"
-                      />
-                      <ChevronDown className="w-4 h-4 text-gray-400 ml-2" />
-                    </div>
-                  </div>
-                  <Button className="bg-rose-500 hover:bg-rose-600 text-white rounded-full w-12 h-12 ml-4 flex items-center justify-center">
-                    <Search className="w-5 h-5" />
-                  </Button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
+      {/* Enhanced Hero Section */}
+      <EnhancedHero />
 
       {/* Featured Properties - Exact match to "Most Loved Homes" section */}
       <section className="py-16 bg-white">
