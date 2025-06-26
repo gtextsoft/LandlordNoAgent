@@ -219,6 +219,60 @@ export type Database = {
           },
         ]
       }
+      property_reviews: {
+        Row: {
+          action: string
+          admin_id: string
+          admin_notes: string | null
+          created_at: string | null
+          flagged_concerns: string[] | null
+          id: string
+          property_id: string
+          rejection_reason: string | null
+          updated_at: string | null
+          verification_score: number | null
+        }
+        Insert: {
+          action: string
+          admin_id: string
+          admin_notes?: string | null
+          created_at?: string | null
+          flagged_concerns?: string[] | null
+          id?: string
+          property_id: string
+          rejection_reason?: string | null
+          updated_at?: string | null
+          verification_score?: number | null
+        }
+        Update: {
+          action?: string
+          admin_id?: string
+          admin_notes?: string | null
+          created_at?: string | null
+          flagged_concerns?: string[] | null
+          id?: string
+          property_id?: string
+          rejection_reason?: string | null
+          updated_at?: string | null
+          verification_score?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "property_reviews_admin_id_fkey"
+            columns: ["admin_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "property_reviews_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       saved_properties: {
         Row: {
           created_at: string

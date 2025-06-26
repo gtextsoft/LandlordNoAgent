@@ -1,5 +1,5 @@
 import { useAuth } from "@/hooks/useAuth";
-import Layout from "@/components/Layout";
+import AdminLayout from "@/components/admin/AdminLayout";
 import AdminDashboard from "@/components/admin/AdminDashboard";
 
 const AdminPanel = () => {
@@ -17,11 +17,9 @@ const AdminPanel = () => {
   }
 
   return (
-    <Layout>
-      <div className="p-6">
-        <AdminDashboard />
-      </div>
-    </Layout>
+    <AdminLayout>
+      <AdminDashboard />
+    </AdminLayout>
   );
 };
 

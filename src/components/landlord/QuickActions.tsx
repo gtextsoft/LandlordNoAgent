@@ -187,9 +187,13 @@ const QuickActions = ({ stats }: QuickActionsProps) => {
     }
   };
 
-  const monthlyGoal = 100000; // ₦100,000 monthly revenue goal
+  // Calculate dynamic monthly goal based on current portfolio
   const currentRevenue = stats?.monthlyRevenue || 0;
-  const goalProgress = Math.min((currentRevenue / monthlyGoal) * 100, 100);
+  const dynamicGoal = Math.max(
+    currentRevenue * 1.2, // 20% growth target
+    50000 // Minimum goal of ₦50,000
+  );
+  const goalProgress = Math.min((currentRevenue / dynamicGoal) * 100, 100);
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -255,14 +259,14 @@ const QuickActions = ({ stats }: QuickActionsProps) => {
               <div className="flex justify-between items-center">
                 <span className="text-sm text-gray-600">Revenue Progress</span>
                 <span className="text-sm font-medium">
-                  ₦{currentRevenue.toLocaleString()} / ₦{monthlyGoal.toLocaleString()}
+                  ₦{currentRevenue.toLocaleString()} / ₦{dynamicGoal.toLocaleString()}
                 </span>
               </div>
               <Progress value={goalProgress} className="h-2" />
               <div className="flex justify-between items-center text-xs text-gray-500">
                 <span>{Math.round(goalProgress)}% completed</span>
                 <span>
-                  {goalProgress >= 100 ? "🎉 Goal achieved!" : `₦${(monthlyGoal - currentRevenue).toLocaleString()} to go`}
+                  {goalProgress >= 100 ? "🎉 Goal achieved!" : `₦${(dynamicGoal - currentRevenue).toLocaleString()} to go`}
                 </span>
               </div>
             </div>

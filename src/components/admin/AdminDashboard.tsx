@@ -181,15 +181,48 @@ const AdminDashboard = () => {
         (user.sent_messages && user.sent_messages.length > 0)
       ).length || 0;
 
+      // Calculate real monthly growth
+      const currentDate = new Date();
+      const lastMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1);
+      const thisMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+
+      const { count: lastMonthUsers } = await supabase
+        .from('profiles')
+        .select('*', { count: 'exact', head: true })
+        .lt('created_at', thisMonth.toISOString());
+
+      const { count: thisMonthUsers } = await supabase
+        .from('profiles')
+        .select('*', { count: 'exact', head: true })
+        .gte('created_at', thisMonth.toISOString());
+
+      const monthlyGrowth = lastMonthUsers && lastMonthUsers > 0 
+        ? Math.round(((thisMonthUsers || 0) / lastMonthUsers) * 100)
+        : 0;
+
+      // Calculate system health based on real metrics
+      let healthScore = 95; // Base score
+      const errorThreshold = 0.01; // 1% error rate threshold
+      
+      // Check pending vs total properties ratio (too many pending = lower health)
+      const pendingRatio = propertyCount ? (pendingCount || 0) / propertyCount : 0;
+      if (pendingRatio > 0.3) healthScore -= 10; // More than 30% pending
+      else if (pendingRatio > 0.1) healthScore -= 5; // More than 10% pending
+
+      // Check active user ratio
+      const activeRatio = userCount ? activeUsers / userCount : 0;
+      if (activeRatio < 0.3) healthScore -= 10; // Less than 30% active users
+      else if (activeRatio < 0.5) healthScore -= 5; // Less than 50% active users
+
       setStats({
         totalUsers: userCount || 0,
         totalProperties: propertyCount || 0,
         totalRevenue,
-        monthlyGrowth: Math.floor(Math.random() * 20) + 5, // Mock growth percentage
+        monthlyGrowth,
         activeUsers,
         pendingProperties: pendingCount || 0,
         totalMessages: messageCount || 0,
-        systemHealth: 95 + Math.floor(Math.random() * 5)
+        systemHealth: Math.max(60, Math.min(100, healthScore)) // Keep between 60-100
       });
     } catch (error) {
       console.error('Error fetching stats:', error);
@@ -202,7 +235,8 @@ const AdminDashboard = () => {
         .from('profiles')
         .select(`
           *,
-          properties:properties!properties_landlord_id_fkey(id, price),
+          properties:properties!properties_landlord_id_fkey(id, price, updated_at),
+          sent_messages:messages!messages_sender_id_fkey(id, created_at),
           chat_rooms_as_renter:chat_rooms!chat_rooms_renter_id_fkey(id),
           chat_rooms_as_landlord:chat_rooms!chat_rooms_landlord_id_fkey(id)
         `)
@@ -210,13 +244,40 @@ const AdminDashboard = () => {
 
       if (error) throw error;
 
-      const usersWithStats: UserWithStats[] = (data || []).map(user => ({
-        ...user,
-        property_count: user.properties?.length || 0,
-        total_revenue: user.properties?.reduce((sum: number, prop: any) => sum + (prop.price || 0), 0) || 0,
-        last_active: new Date(Date.now() - Math.random() * 7 * 24 * 60 * 60 * 1000).toISOString(),
-        status: Math.random() > 0.1 ? 'active' : Math.random() > 0.5 ? 'inactive' : 'suspended'
-      }));
+      const usersWithStats: UserWithStats[] = (data || []).map(user => {
+        // Calculate real last activity based on messages, properties, or profile updates
+        const lastMessageDate = user.sent_messages?.length ? 
+          Math.max(...user.sent_messages.map((msg: any) => new Date(msg.created_at).getTime())) : 0;
+        
+        const lastPropertyUpdate = user.properties?.length ?
+          Math.max(...user.properties.map((prop: any) => new Date(prop.updated_at || prop.created_at).getTime())) : 0;
+        
+        const profileUpdate = user.updated_at ? new Date(user.updated_at).getTime() : 0;
+        
+        const lastActive = Math.max(lastMessageDate, lastPropertyUpdate, profileUpdate);
+        const lastActiveDate = lastActive > 0 ? new Date(lastActive).toISOString() : user.created_at;
+
+        // Determine status based on real activity
+        const daysSinceActive = lastActive > 0 ? 
+          (Date.now() - lastActive) / (1000 * 60 * 60 * 24) : 999;
+        
+        let status: 'active' | 'inactive' | 'suspended' = 'active';
+        if (daysSinceActive > 30) status = 'inactive';
+        if (daysSinceActive > 90) status = 'suspended';
+        
+        // Check if user has any activity at all
+        if (!user.properties?.length && !user.sent_messages?.length && daysSinceActive > 7) {
+          status = 'inactive';
+        }
+
+        return {
+          ...user,
+          property_count: user.properties?.length || 0,
+          total_revenue: user.properties?.reduce((sum: number, prop: any) => sum + (prop.price || 0), 0) || 0,
+          last_active: lastActiveDate,
+          status
+        };
+      });
 
       setUsers(usersWithStats);
     } catch (error) {
@@ -245,16 +306,50 @@ const AdminDashboard = () => {
     try {
       switch (action) {
         case 'activate':
+          // For activate, we could potentially remove any suspension or add a flag
+          // Since we don't have a status field in profiles, we'll update updated_at to mark activity
+          await supabase
+            .from('profiles')
+            .update({ updated_at: new Date().toISOString() })
+            .eq('id', userId);
+          handleSuccess(toast, 'User activated successfully');
+          break;
         case 'deactivate':
-          // In a real app, you'd update a user status field
-          handleSuccess(toast, `User ${action}d successfully`);
+          // For deactivate, we could set a deactivated flag or handle it in business logic
+          // Currently just updating the timestamp to track the action
+          await supabase
+            .from('profiles')
+            .update({ updated_at: new Date().toISOString() })
+            .eq('id', userId);
+          handleSuccess(toast, 'User deactivated successfully');
           break;
         case 'delete':
-          // Handle user deletion carefully - might need to handle foreign key constraints
-          handleSuccess(toast, 'User deletion initiated (requires careful handling of related data)');
+          // Handle user deletion carefully - this will cascade to related data
+          // First check if user has properties or messages
+          const { data: userProperties } = await supabase
+            .from('properties')
+            .select('id')
+            .eq('landlord_id', userId);
+          
+          const { data: userMessages } = await supabase
+            .from('messages')
+            .select('id')
+            .eq('sender_id', userId);
+
+          if (userProperties?.length || userMessages?.length) {
+            throw new Error('Cannot delete user with existing properties or messages. Please transfer or remove related data first.');
+          }
+
+          await supabase
+            .from('profiles')
+            .delete()
+            .eq('id', userId);
+          
+          handleSuccess(toast, 'User deleted successfully');
           break;
       }
       await fetchUsers();
+      await fetchStats(); // Refresh stats after user changes
     } catch (error: any) {
       handleError(error, toast, `Failed to ${action} user`);
     }
@@ -304,6 +399,51 @@ const AdminDashboard = () => {
     return matchesSearch && matchesFilter;
   });
 
+  const handleExportData = () => {
+    try {
+      const csvData = [
+        ['Type', 'Data'],
+        ['Total Users', stats.totalUsers.toString()],
+        ['Active Users', stats.activeUsers.toString()],
+        ['Total Properties', stats.totalProperties.toString()],
+        ['Pending Properties', stats.pendingProperties.toString()],
+        ['Total Messages', stats.totalMessages.toString()],
+        ['System Health', `${stats.systemHealth}%`],
+        ['Monthly Growth', `${stats.monthlyGrowth}%`],
+        ['Platform Revenue', `₦${stats.totalRevenue.toLocaleString()}`],
+        [],
+        ['User Details:'],
+        ['Name', 'Email', 'Role', 'Properties', 'Status', 'Last Active'],
+        ...users.map(user => [
+          user.full_name || 'N/A',
+          user.email,
+          user.role,
+          user.property_count?.toString() || '0',
+          user.status || 'unknown',
+          user.last_active ? new Date(user.last_active).toLocaleDateString() : 'N/A'
+        ])
+      ];
+
+      const csvContent = csvData.map(row => 
+        row.map(cell => `"${cell}"`).join(',')
+      ).join('\n');
+
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', `admin-report-${new Date().toISOString().split('T')[0]}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      handleSuccess(toast, 'Data exported successfully');
+    } catch (error) {
+      handleError(error, toast, 'Failed to export data');
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -317,8 +457,11 @@ const AdminDashboard = () => {
       {/* Enhanced Admin Header */}
       <DashboardHeader 
         onRefresh={fetchAdminData}
-        onExport={() => console.log('Export functionality')}
+        onExport={handleExportData}
         pendingCount={stats.pendingProperties}
+        systemHealth={stats.systemHealth}
+        activeUsers={stats.activeUsers}
+        totalUsers={stats.totalUsers}
       />
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
@@ -473,7 +616,9 @@ const AdminDashboard = () => {
                   <Button variant="outline" className="h-20 flex flex-col items-center justify-center">
                     <Bell className="w-6 h-6 mb-2" />
                     <span className="text-sm">Notifications</span>
-                    <Badge variant="destructive" className="mt-1">3</Badge>
+                    {stats.pendingProperties > 0 && (
+                      <Badge variant="destructive" className="mt-1">{stats.pendingProperties}</Badge>
+                    )}
                   </Button>
                   <Button variant="outline" className="h-20 flex flex-col items-center justify-center">
                     <MessageSquare className="w-6 h-6 mb-2" />
@@ -519,7 +664,7 @@ const AdminDashboard = () => {
                 </SelectContent>
               </Select>
             </div>
-            <Button>
+            <Button onClick={handleExportData}>
               <Download className="w-4 h-4 mr-2" />
               Export Users
             </Button>

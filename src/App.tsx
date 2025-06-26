@@ -56,6 +56,8 @@ function AppContent() {
         <Route path="/landing" element={<LandingPage />} />
         <Route path="/" element={
           user ? (
+            hasRole('admin') ? 
+            <Navigate to="/admin" replace /> :
             hasRole('landlord') ? 
             <Navigate to="/landlord" replace /> : 
             <Navigate to="/properties" replace />
@@ -122,6 +124,46 @@ function AppContent() {
         />
         <Route
           path="/admin"
+          element={
+            <ProtectedRoute allowedRoles={["admin"]}>
+              <AdminPanel />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/users"
+          element={
+            <ProtectedRoute allowedRoles={["admin"]}>
+              <AdminPanel />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/properties"
+          element={
+            <ProtectedRoute allowedRoles={["admin"]}>
+              <AdminPanel />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/analytics"
+          element={
+            <ProtectedRoute allowedRoles={["admin"]}>
+              <AdminPanel />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/database"
+          element={
+            <ProtectedRoute allowedRoles={["admin"]}>
+              <AdminPanel />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/settings"
           element={
             <ProtectedRoute allowedRoles={["admin"]}>
               <AdminPanel />

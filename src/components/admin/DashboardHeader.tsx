@@ -14,9 +14,19 @@ interface DashboardHeaderProps {
   onRefresh?: () => void;
   onExport?: () => void;
   pendingCount?: number;
+  systemHealth?: number;
+  activeUsers?: number;
+  totalUsers?: number;
 }
 
-const DashboardHeader = ({ onRefresh, onExport, pendingCount = 0 }: DashboardHeaderProps) => {
+const DashboardHeader = ({ 
+  onRefresh, 
+  onExport, 
+  pendingCount = 0,
+  systemHealth = 95,
+  activeUsers = 0,
+  totalUsers = 0
+}: DashboardHeaderProps) => {
   const { profile } = useAuth();
 
   return (
@@ -83,20 +93,32 @@ const DashboardHeader = ({ onRefresh, onExport, pendingCount = 0 }: DashboardHea
       {/* Quick Stats Bar */}
       <div className="mt-6 grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4">
-          <div className="text-red-100 text-sm font-medium">System Status</div>
-          <div className="text-2xl font-bold mt-1">Operational</div>
+          <div className="text-red-100 text-sm font-medium">System Health</div>
+          <div className="text-2xl font-bold mt-1 flex items-center">
+            {systemHealth}%
+            <div className={`ml-2 w-2 h-2 rounded-full ${
+              systemHealth >= 95 ? 'bg-green-400' : 
+              systemHealth >= 80 ? 'bg-yellow-400' : 'bg-red-400'
+            }`} />
+          </div>
         </div>
         <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4">
-          <div className="text-red-100 text-sm font-medium">Last Backup</div>
-          <div className="text-lg font-bold mt-1">2 hours ago</div>
+          <div className="text-red-100 text-sm font-medium">Active Users</div>
+          <div className="text-lg font-bold mt-1">
+            {activeUsers.toLocaleString()} / {totalUsers.toLocaleString()}
+          </div>
         </div>
         <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4">
-          <div className="text-red-100 text-sm font-medium">Server Load</div>
-          <div className="text-lg font-bold mt-1">28% CPU</div>
+          <div className="text-red-100 text-sm font-medium">User Engagement</div>
+          <div className="text-lg font-bold mt-1">
+            {totalUsers > 0 ? Math.round((activeUsers / totalUsers) * 100) : 0}%
+          </div>
         </div>
         <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4">
-          <div className="text-red-100 text-sm font-medium">Active Sessions</div>
-          <div className="text-lg font-bold mt-1">1,247 users</div>
+          <div className="text-red-100 text-sm font-medium">Platform Status</div>
+          <div className="text-lg font-bold mt-1">
+            {pendingCount === 0 ? 'All Clear' : `${pendingCount} Pending`}
+          </div>
         </div>
       </div>
     </div>

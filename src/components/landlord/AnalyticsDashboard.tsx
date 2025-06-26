@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { Property } from "@/lib/supabase";
 import { AnalyticsService } from "@/services/analyticsService";
+import { useAuth } from "@/hooks/useAuth";
 
 interface AnalyticsDashboardProps {
   properties: Property[];
@@ -39,23 +40,11 @@ interface AnalyticsDashboardProps {
 const AnalyticsDashboard = ({ properties, chatRooms, stats, loading = false }: AnalyticsDashboardProps) => {
   const [timeRange, setTimeRange] = useState("30d");
   const [chartType, setChartType] = useState("revenue");
+  const { profile } = useAuth();
 
-  // Generate chart data using the analytics service with real base values
-  const getBaseValue = (type: string) => {
-    switch (type) {
-      case "revenue":
-        return stats.monthlyRevenue * 30; // Convert monthly to total for time range
-      case "views":
-        return stats.totalViews;
-      case "inquiries":
-        return stats.totalInquiries;
-      default:
-        return 100;
-    }
-  };
-
-  const chartData = AnalyticsService.generateChartData(chartType, timeRange, getBaseValue(chartType));
-  const maxValue = Math.max(...chartData.map(d => d.value), 1);
+  // State for real chart data
+  const [chartData, setChartData] = useState<any[]>([]);
+  const [chartLoading, setChartLoading] = useState(false);
 
   // Property performance analysis using real data
   const [propertyPerformance, setPropertyPerformance] = useState<any[]>([]);
@@ -81,6 +70,26 @@ const AnalyticsDashboard = ({ properties, chatRooms, stats, loading = false }: A
       loadAnalyticsData();
     }
   }, [properties]);
+
+  // Load chart data when chart type or time range changes
+  useEffect(() => {
+    const loadChartData = async () => {
+      if (!profile?.id) return;
+      
+      setChartLoading(true);
+      try {
+        const data = await AnalyticsService.generateRealChartData(profile.id, chartType, timeRange);
+        setChartData(data);
+      } catch (error) {
+        console.error('Error loading chart data:', error);
+        setChartData([]);
+      } finally {
+        setChartLoading(false);
+      }
+    };
+
+    loadChartData();
+  }, [chartType, timeRange, profile?.id]);
 
   // Use the calculated metrics
   const totalRevenue = financialMetrics.totalRevenue || 0;
@@ -234,28 +243,45 @@ const AnalyticsDashboard = ({ properties, chatRooms, stats, loading = false }: A
             </div>
           </CardHeader>
           <CardContent>
-            <div className="h-64 flex items-end justify-between space-x-1">
-              {chartData.map((point, index) => (
-                <div key={index} className="flex flex-col items-center flex-1 group">
-                  <div className="relative">
-                    <div 
-                      className="w-full bg-gradient-to-t from-blue-500 to-blue-300 rounded-t hover:from-blue-600 hover:to-blue-400 transition-colors cursor-pointer"
-                      style={{ 
-                        height: `${Math.max((point.value / maxValue) * 200, 8)}px`,
-                        minWidth: '12px'
-                      }}
-                      title={`${point.label}: ${point.value.toLocaleString()}`}
-                    ></div>
-                    <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
-                      {chartType === 'revenue' ? `₦${point.value.toLocaleString()}` : point.value.toLocaleString()}
-                    </div>
-                  </div>
-                  <span className="text-xs text-gray-500 mt-1 transform -rotate-45 origin-top-left">
-                    {point.label}
-                  </span>
+            {chartLoading ? (
+              <div className="h-64 flex items-center justify-center">
+                <RefreshCw className="w-8 h-8 animate-spin text-blue-600" />
+              </div>
+            ) : chartData.length === 0 ? (
+              <div className="h-64 flex items-center justify-center">
+                <div className="text-center text-gray-500">
+                  <BarChart3 className="w-12 h-12 mx-auto mb-2 text-gray-300" />
+                  <p>No data available for the selected period</p>
+                  <p className="text-sm">Data will appear as your properties receive activity</p>
                 </div>
-              ))}
-            </div>
+              </div>
+            ) : (
+              <div className="h-64 flex items-end justify-between space-x-1">
+                {chartData.map((point, index) => {
+                  const maxValue = Math.max(...chartData.map(d => d.value), 1);
+                  return (
+                    <div key={index} className="flex flex-col items-center flex-1 group">
+                      <div className="relative">
+                        <div 
+                          className="w-full bg-gradient-to-t from-blue-500 to-blue-300 rounded-t hover:from-blue-600 hover:to-blue-400 transition-colors cursor-pointer"
+                          style={{ 
+                            height: `${Math.max((point.value / maxValue) * 200, 8)}px`,
+                            minWidth: '12px'
+                          }}
+                          title={`${point.label}: ${point.value.toLocaleString()}`}
+                        ></div>
+                        <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                          {chartType === 'revenue' ? `₦${point.value.toLocaleString()}` : point.value.toLocaleString()}
+                        </div>
+                      </div>
+                      <span className="text-xs text-gray-500 mt-1 transform -rotate-45 origin-top-left">
+                        {point.label}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -349,26 +375,60 @@ const AnalyticsDashboard = ({ properties, chatRooms, stats, loading = false }: A
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              <div className="p-4 bg-blue-50 rounded-lg border-l-4 border-blue-500">
-                <h4 className="font-medium text-blue-900">Optimization Opportunity</h4>
-                <p className="text-sm text-blue-800 mt-1">
-                  Properties in the ₦100k-₦200k range are getting 40% more views. Consider adjusting pricing strategy.
-                </p>
-              </div>
+              {/* Dynamic insights based on real data */}
+              {priceRanges.length > 0 && (() => {
+                const bestPerformingRange = priceRanges.reduce((best, current) => 
+                  current.count > best.count ? current : best
+                );
+                return bestPerformingRange.count > 1 ? (
+                  <div className="p-4 bg-blue-50 rounded-lg border-l-4 border-blue-500">
+                    <h4 className="font-medium text-blue-900">Market Insight</h4>
+                    <p className="text-sm text-blue-800 mt-1">
+                      Most of your properties ({bestPerformingRange.count}) are in the {bestPerformingRange.range} range, 
+                      representing {bestPerformingRange.percentage}% of your portfolio.
+                    </p>
+                  </div>
+                ) : null;
+              })()}
               
-              <div className="p-4 bg-green-50 rounded-lg border-l-4 border-green-500">
-                <h4 className="font-medium text-green-900">Strong Performance</h4>
-                <p className="text-sm text-green-800 mt-1">
-                  Your occupancy rate of {stats.occupancyRate}% is above the market average of 75%.
-                </p>
-              </div>
+              {stats.occupancyRate >= 75 ? (
+                <div className="p-4 bg-green-50 rounded-lg border-l-4 border-green-500">
+                  <h4 className="font-medium text-green-900">Strong Performance</h4>
+                  <p className="text-sm text-green-800 mt-1">
+                    Your occupancy rate of {stats.occupancyRate}% is {stats.occupancyRate >= 80 ? 'excellent and above' : 'above'} the market average of 75%.
+                  </p>
+                </div>
+              ) : (
+                <div className="p-4 bg-yellow-50 rounded-lg border-l-4 border-yellow-500">
+                  <h4 className="font-medium text-yellow-900">Improvement Opportunity</h4>
+                  <p className="text-sm text-yellow-800 mt-1">
+                    Your occupancy rate of {stats.occupancyRate}% is below the market average. Consider reviewing pricing or marketing strategy.
+                  </p>
+                </div>
+              )}
               
-              <div className="p-4 bg-yellow-50 rounded-lg border-l-4 border-yellow-500">
-                <h4 className="font-medium text-yellow-900">Action Required</h4>
-                <p className="text-sm text-yellow-800 mt-1">
-                  {properties.filter(p => p.status === 'inactive').length} properties are inactive. Reactivate to increase revenue.
-                </p>
-              </div>
+              {(() => {
+                const inactiveCount = properties.filter(p => p.status === 'inactive').length;
+                if (inactiveCount > 0) {
+                  return (
+                    <div className="p-4 bg-yellow-50 rounded-lg border-l-4 border-yellow-500">
+                      <h4 className="font-medium text-yellow-900">Action Required</h4>
+                      <p className="text-sm text-yellow-800 mt-1">
+                        {inactiveCount} {inactiveCount === 1 ? 'property is' : 'properties are'} inactive. 
+                        Reactivate to increase revenue potential.
+                      </p>
+                    </div>
+                  );
+                }
+                return (
+                  <div className="p-4 bg-green-50 rounded-lg border-l-4 border-green-500">
+                    <h4 className="font-medium text-green-900">All Systems Go</h4>
+                    <p className="text-sm text-green-800 mt-1">
+                      All your properties are active and available for rent. Great job!
+                    </p>
+                  </div>
+                );
+              })()}
             </div>
           </CardContent>
         </Card>
