@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -32,6 +32,7 @@ import { Property } from "@/lib/supabase";
 import PropertyCard from "@/components/PropertyCard";
 import PropertyComparison from "./PropertyComparison";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from '@/lib/supabase';
 
 interface PropertyManagementProps {
   properties: Property[];
@@ -48,6 +49,7 @@ const PropertyManagement = ({ properties, onToggleStatus, onDelete, onUpdate, lo
   const [selectedProperties, setSelectedProperties] = useState<Set<string>>(new Set());
   const [bulkActionLoading, setBulkActionLoading] = useState(false);
   const [showComparison, setShowComparison] = useState(false);
+  const [applicationsByProperty, setApplicationsByProperty] = useState<Record<string, any[]>>({});
   
   const { toast } = useToast();
 
@@ -188,6 +190,44 @@ const PropertyManagement = ({ properties, onToggleStatus, onDelete, onUpdate, lo
     setSearchTerm("");
     setStatusFilter("all");
     setPriceRange({ min: "", max: "" });
+  };
+
+  useEffect(() => {
+    const fetchApplications = async () => {
+      const result: Record<string, any[]> = {};
+      for (const property of properties) {
+        const { data, error } = await supabase
+          .from('rental_applications')
+          .select('*')
+          .eq('property_id', property.id);
+        if (!error && data && data.length > 0) {
+          result[property.id] = data;
+        }
+      }
+      setApplicationsByProperty(result);
+    };
+    if (properties.length > 0) fetchApplications();
+  }, [properties]);
+
+  const handleApplicationAction = async (applicationId: string, action: 'approved' | 'rejected') => {
+    try {
+      const { error } = await supabase
+        .from('rental_applications')
+        .update({ status: action })
+        .eq('id', applicationId);
+      if (error) throw error;
+      toast({ title: `Application ${action}`, description: `Application has been ${action}.`, variant: 'default' });
+      // Refresh applications
+      const updatedApplicationsByProperty = { ...applicationsByProperty };
+      for (const propertyId in updatedApplicationsByProperty) {
+        updatedApplicationsByProperty[propertyId] = updatedApplicationsByProperty[propertyId].map(app =>
+          app.id === applicationId ? { ...app, status: action } : app
+        );
+      }
+      setApplicationsByProperty(updatedApplicationsByProperty);
+    } catch (error: any) {
+      toast({ title: 'Error', description: error.message || 'Failed to update application.', variant: 'destructive' });
+    }
   };
 
   // Show comparison view if enabled
@@ -416,27 +456,66 @@ const PropertyManagement = ({ properties, onToggleStatus, onDelete, onUpdate, lo
         ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredProperties.map((property) => (
-              <div key={property.id} className="relative">
-                {/* Selection Checkbox */}
-                <div className="absolute top-3 left-3 z-10">
-                  <Checkbox
-                    checked={selectedProperties.has(property.id)}
-                    onCheckedChange={() => handleSelectProperty(property.id)}
-                    className="bg-white/90 backdrop-blur-sm"
-                  />
+            <div key={property.id} className="mb-8">
+              <PropertyCard property={property} />
+              {/* Rental Applications Section */}
+              {applicationsByProperty[property.id] && applicationsByProperty[property.id].length > 0 && (
+                <div className="bg-gray-50 rounded-lg p-4 mt-4 border">
+                  <h4 className="text-lg font-semibold mb-2 text-gray-800">Rental Applications</h4>
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b">
+                        <th className="text-left p-2">Applicant</th>
+                        <th className="text-left p-2">Email</th>
+                        <th className="text-left p-2">Status</th>
+                        <th className="text-left p-2">Documents</th>
+                        <th className="text-left p-2">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {applicationsByProperty[property.id].map((app) => (
+                        <tr key={app.id} className="border-b">
+                          <td className="p-2">{app.full_name}</td>
+                          <td className="p-2">{app.email}</td>
+                          <td className="p-2">{app.status}</td>
+                          <td className="p-2">
+                            {Array.isArray(app.document_urls) && app.document_urls.length > 0 ? (
+                              <ul>
+                                {app.document_urls.map((url: string, idx: number) => (
+                                  <li key={idx}>
+                                    <a href={url} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">View Document {idx + 1}</a>
+                                  </li>
+                                ))}
+                              </ul>
+                            ) : (
+                              <span className="text-gray-400">No documents</span>
+                            )}
+                          </td>
+                          <td className="p-2">
+                            {app.status === 'pending' && (
+                              <>
+                                <button
+                                  className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded mr-2"
+                                  onClick={() => handleApplicationAction(app.id, 'approved')}
+                                >
+                                  Approve
+                                </button>
+                                <button
+                                  className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded"
+                                  onClick={() => handleApplicationAction(app.id, 'rejected')}
+                                >
+                                  Reject
+                                </button>
+                              </>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
-                
-            <PropertyCard
-              property={property}
-              showActions={true}
-              showDeleteButton={true}
-              showEditButton={true}
-              showSaveButton={false}
-              onToggleStatus={onToggleStatus}
-              onDelete={onDelete}
-              onUpdate={onUpdate}
-            />
-              </div>
+              )}
+            </div>
           ))}
         </div>
         )}

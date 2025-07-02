@@ -1,6 +1,13 @@
 
 import { supabase } from '@/lib/supabase';
 import { useToast } from '@/hooks/use-toast';
+import { 
+  handleError as enhancedHandleError,
+  handleSuccess as enhancedHandleSuccess,
+  ValidationError,
+  withErrorHandling,
+  validateRequired
+} from '@/utils/errorHandling';
 
 // Shared logout function to eliminate duplication
 export const handleLogout = async () => {
@@ -14,23 +21,11 @@ export const handleLogout = async () => {
   }
 };
 
-// Shared error handler
-export const handleError = (error: any, toast: ReturnType<typeof useToast>['toast'], defaultMessage = 'An error occurred') => {
-  console.error(error);
-  toast({
-    title: 'Error',
-    description: error.message || defaultMessage,
-    variant: 'destructive',
-  });
-};
+// Backward compatibility - use enhanced error handler
+export const handleError = enhancedHandleError;
 
-// Shared success handler
-export const handleSuccess = (toast: ReturnType<typeof useToast>['toast'], message: string) => {
-  toast({
-    title: 'Success',
-    description: message,
-  });
-};
+// Backward compatibility - use enhanced success handler  
+export const handleSuccess = enhancedHandleSuccess;
 
 // Shared image compression utility
 export const compressImage = (file: File, maxSizeMB: number = 5): Promise<File> => {

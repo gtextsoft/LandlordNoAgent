@@ -312,4 +312,48 @@ export class AnalyticsService {
     a.click();
     window.URL.revokeObjectURL(url);
   }
+
+  // Get user activity data
+  static async getUserActivityData(timeRange: string): Promise<AnalyticsData[]> {
+    const days = timeRange === "7d" ? 7 : timeRange === "30d" ? 30 : 90;
+    const data: AnalyticsData[] = [];
+    
+    try {
+      for (let i = days - 1; i >= 0; i--) {
+        const date = new Date();
+        date.setDate(date.getDate() - i);
+        const dateStr = date.toISOString().split('T')[0];
+        const nextDay = new Date(date);
+        nextDay.setDate(nextDay.getDate() + 1);
+        
+        // Get users who were active on this date
+        const { data: activeUsers, error } = await supabase
+          .from('profiles')
+          .select('id')
+          .gte('last_sign_in_at', dateStr)
+          .lt('last_sign_in_at', nextDay.toISOString().split('T')[0]);
+        
+        if (error) throw error;
+        
+        data.push({
+          date: dateStr,
+          value: activeUsers?.length || 0,
+          label: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+        });
+      }
+      
+      return data;
+    } catch (error) {
+      console.error('Error generating user activity data:', error);
+      return Array.from({ length: days }, (_, i) => {
+        const date = new Date();
+        date.setDate(date.getDate() - (days - 1 - i));
+        return {
+          date: date.toISOString().split('T')[0],
+          value: 0,
+          label: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+        };
+      });
+    }
+  }
 } 

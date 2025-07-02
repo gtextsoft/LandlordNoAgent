@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,13 +11,14 @@ import { supabase, Property } from "@/lib/supabase";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import Layout from "@/components/Layout";
 import { useLoadingState } from "@/hooks/useLoadingState";
-import { handleError } from "@/utils/shared";
+import { handleError } from "@/utils/errorHandling";
 import { useToast } from "@/hooks/use-toast";
 import EnhancedSearch from "@/components/EnhancedSearch";
 import ImprovedPropertyCard from "@/components/ImprovedPropertyCard";
 import PropertyMapView from "@/components/PropertyMapView";
 import MobileOptimizedPropertyCard from "@/components/MobileOptimizedPropertyCard";
 import ResponsiveGrid from "@/components/ResponsiveGrid";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 const Properties = () => {
   const [properties, setProperties] = useState<Property[]>([]);
@@ -27,79 +28,53 @@ const Properties = () => {
   const [propertyTypeFilter, setPropertyTypeFilter] = useState("all");
   const [priceRangeFilter, setPriceRangeFilter] = useState("all");
   const [bedroomsFilter, setBedroomsFilter] = useState("all");
+  const [bathroomsFilter, setBathroomsFilter] = useState("");
+  const [amenitiesFilter, setAmenitiesFilter] = useState<string[]>([]);
   const [filteredProperties, setFilteredProperties] = useState<Property[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [viewMode, setViewMode] = useState<'list' | 'map'>('list');
   const [selectedProperty, setSelectedProperty] = useState<Property | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
+  const [totalCount, setTotalCount] = useState(0);
   const propertiesPerPage = 15;
   const { profile } = useAuth();
   const { savedProperties, toggleSavedProperty } = useSavedProperties();
   const { toast } = useToast();
+  const [comparedProperties, setComparedProperties] = useState<string[]>([]);
+  const [compareModalOpen, setCompareModalOpen] = useState(false);
+
+  // Debounce search query to improve performance
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
   useEffect(() => {
     fetchProperties();
   }, []);
 
-  useEffect(() => {
-    filterProperties();
-  }, [locationFilter, propertyTypeFilter, priceRangeFilter, bedroomsFilter, properties, searchQuery]);
-
-  const fetchProperties = async () => {
-    try {
-      setLoading(true);
-      
-      // Fetch properties
-      const { data, error } = await supabase
-        .from('properties')
-        .select(`
-          *,
-          profiles!properties_landlord_id_fkey (*)
-        `)
-        .eq('status', 'active')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setProperties(data || []);
-
-      // Fetch chat rooms for authenticated users
-      if (profile) {
-        const { data: chatData, error: chatError } = await supabase
-          .from('chat_rooms')
-          .select(`
-            *,
-            properties (*, profiles!properties_landlord_id_fkey (*)),
-            landlord_profile:profiles!chat_rooms_landlord_id_fkey (*),
-            renter_profile:profiles!chat_rooms_renter_id_fkey (*)
-          `)
-          .eq('renter_id', profile.id)
-          .order('created_at', { ascending: false });
-
-        if (chatError) throw chatError;
-        setChatRooms((chatData as any) || []);
-      }
-    } catch (error: any) {
-      handleError(error, toast, 'Error fetching data');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const filterProperties = () => {
+  // Memoized filtering for better performance
+  const filteredPropertiesMemo = useMemo(() => {
     let filtered = properties;
 
     // Search query filter
-    if (searchQuery) {
+    if (debouncedSearchQuery) {
+      const query = debouncedSearchQuery.toLowerCase();
       filtered = filtered.filter(property =>
-        property.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        property.location?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        property.description?.toLowerCase().includes(searchQuery.toLowerCase())
+        property.title?.toLowerCase().includes(query) ||
+        property.location?.toLowerCase().includes(query) ||
+        property.description?.toLowerCase().includes(query)
       );
     }
 
     if (locationFilter) {
+      const location = locationFilter.toLowerCase();
       filtered = filtered.filter(property =>
-        property.location?.toLowerCase().includes(locationFilter.toLowerCase())
+        property.location?.toLowerCase().includes(location)
       );
     }
 
@@ -133,39 +108,138 @@ const Properties = () => {
       }
     }
 
-    setFilteredProperties(filtered);
+    // Bathrooms filter
+    if (bathroomsFilter && bathroomsFilter !== "") {
+      const bathrooms = parseInt(bathroomsFilter);
+      if (!isNaN(bathrooms)) {
+        filtered = filtered.filter(property => (property.bathrooms || 0) >= bathrooms);
+      }
+    }
+
+    // Amenities filter
+    if (amenitiesFilter && amenitiesFilter.length > 0) {
+      filtered = filtered.filter(property => {
+        if (!property.amenities || !Array.isArray(property.amenities)) return false;
+        return amenitiesFilter.every(amenity => property.amenities.includes(amenity));
+      });
+    }
+
+    return filtered;
+  }, [properties, debouncedSearchQuery, locationFilter, propertyTypeFilter, priceRangeFilter, bedroomsFilter, bathroomsFilter, amenitiesFilter]);
+
+  // Update filtered properties when memo changes
+  useEffect(() => {
+    setFilteredProperties(filteredPropertiesMemo);
     setCurrentPage(1);
+  }, [filteredPropertiesMemo]);
+
+  const fetchProperties = async (page: number = 1, pageSize: number = 20) => {
+    try {
+      setLoading(true);
+      
+      const from = (page - 1) * pageSize;
+      const to = from + pageSize - 1;
+      
+      // Optimized property fetch with pagination and minimal data
+      const { data, error, count } = await supabase
+        .from('properties')
+        .select(`
+          *,
+          profiles!properties_landlord_id_fkey (
+            id,
+            full_name,
+            email,
+            avatar_url
+          )
+        `, { count: 'exact' })
+        .eq('status', 'active')
+        .range(from, to)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      
+      // Type cast data to Property[] to fix type mismatch with profiles property
+      setProperties((data || []) as Property[]);
+      setTotalCount(count || 0);
+
+      // Fetch chat rooms for authenticated users (separate query for performance)
+      if (profile) {
+        const { data: chatData, error: chatError } = await supabase
+          .from('chat_rooms')
+          .select(`
+            id,
+            property_id,
+            landlord_id,
+            renter_id,
+            created_at,
+            properties!chat_rooms_property_id_fkey (
+              id,
+              title,
+              price,
+              location
+            )
+          `)
+          .eq('renter_id', profile.id)
+          .order('created_at', { ascending: false })
+          .limit(10); // Limit recent chat rooms
+
+        if (chatError) throw chatError;
+        setChatRooms(chatData || []);
+      }
+    } catch (error: any) {
+      handleError(error, toast, 'Error fetching data');
+      // Initialize with empty arrays on error to maintain valid state
+      setProperties([]);
+      setChatRooms([]);
+      setTotalCount(0);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  // Enhanced search handlers
-  const handleSearch = (query: string, filters: any) => {
+  // Enhanced search handlers with useCallback for performance
+  const handleSearch = useCallback((query: string, filters: any) => {
     setSearchQuery(query);
     // Apply enhanced filters
     if (filters.location) setLocationFilter(filters.location);
     if (filters.propertyType) setPropertyTypeFilter(filters.propertyType);
     if (filters.bedrooms) setBedroomsFilter(filters.bedrooms);
-    if (filters.bathrooms) {
-      // Handle bathrooms filter if needed
-    }
+    if (filters.bathrooms) setBathroomsFilter(filters.bathrooms);
+    if (filters.amenities) setAmenitiesFilter(filters.amenities);
     // Handle price range
-    if (filters.priceRange && filters.priceRange[0] > 0 || filters.priceRange[1] < 5000000) {
+    if (filters.priceRange && (filters.priceRange[0] > 0 || filters.priceRange[1] < 5000000)) {
       setPriceRangeFilter(`${filters.priceRange[0]}-${filters.priceRange[1]}`);
     }
-  };
+  }, []);
 
-  const handlePropertySelect = (property: Property) => {
+  const handlePropertySelect = useCallback((property: Property) => {
     setSelectedProperty(property);
-  };
+  }, []);
 
-  const totalPages = Math.ceil(filteredProperties.length / propertiesPerPage);
-  const startIndex = (currentPage - 1) * propertiesPerPage;
-  const endIndex = startIndex + propertiesPerPage;
-  const currentProperties = filteredProperties.slice(startIndex, endIndex);
+  // Memoized pagination calculations
+  const paginationData = useMemo(() => {
+    const totalPages = Math.ceil(filteredProperties.length / propertiesPerPage);
+    const startIndex = (currentPage - 1) * propertiesPerPage;
+    const endIndex = startIndex + propertiesPerPage;
+    const currentProperties = filteredProperties.slice(startIndex, endIndex);
+    
+    return { totalPages, currentProperties };
+  }, [filteredProperties, currentPage, propertiesPerPage]);
 
-  const handlePageChange = (page: number) => {
+  const handlePageChange = useCallback((page: number) => {
     setCurrentPage(page);
     window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
+  }, []);
+
+  const handleCompareChange = useCallback((propertyId: string, checked: boolean) => {
+    setComparedProperties(prev => {
+      if (checked) {
+        return [...prev, propertyId];
+      } else {
+        return prev.filter(id => id !== propertyId);
+      }
+    });
+  }, []);
 
   if (loading) {
     return (
@@ -361,13 +435,15 @@ const Properties = () => {
             <>
               {/* Desktop and Tablet View */}
               <div className="hidden md:grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                {currentProperties.map((property) => (
+                {paginationData.currentProperties.map((property) => (
                   <ImprovedPropertyCard
                     key={property.id}
                     property={property}
                     variant="default"
                     showActions={true}
                     showVirtualTour={false}
+                    onCompareChange={handleCompareChange}
+                    isCompared={comparedProperties.includes(property.id)}
                   />
                 ))}
               </div>
@@ -375,7 +451,7 @@ const Properties = () => {
               {/* Mobile View */}
               <div className="md:hidden">
                 <ResponsiveGrid mobileColumns={1} gap="md">
-                  {currentProperties.map((property) => (
+                  {paginationData.currentProperties.map((property) => (
                     <MobileOptimizedPropertyCard
                       key={property.id}
                       property={property}
@@ -389,7 +465,7 @@ const Properties = () => {
               </div>
 
               {/* Pagination */}
-              {totalPages > 1 && (
+              {paginationData.totalPages > 1 && (
                 <div className="flex items-center justify-center mt-12 space-x-2">
                   <Button
                     variant="outline"
@@ -402,14 +478,14 @@ const Properties = () => {
                     Prev
                   </Button>
                   
-                  {Array.from({ length: Math.min(8, totalPages) }, (_, i) => {
+                  {Array.from({ length: Math.min(8, paginationData.totalPages) }, (_, i) => {
                     let pageNum;
-                    if (totalPages <= 8) {
+                    if (paginationData.totalPages <= 8) {
                       pageNum = i + 1;
                     } else if (currentPage <= 4) {
                       pageNum = i + 1;
-                    } else if (currentPage >= totalPages - 3) {
-                      pageNum = totalPages - 7 + i;
+                    } else if (currentPage >= paginationData.totalPages - 3) {
+                      pageNum = paginationData.totalPages - 7 + i;
                     } else {
                       pageNum = currentPage - 3 + i;
                     }
@@ -435,7 +511,7 @@ const Properties = () => {
                     variant="outline"
                     size="sm"
                     onClick={() => handlePageChange(currentPage + 1)}
-                    disabled={currentPage === totalPages}
+                    disabled={currentPage === paginationData.totalPages}
                     className="flex items-center bg-teal-700 hover:bg-teal-800 text-white border-teal-700"
                   >
                     Next
@@ -445,8 +521,84 @@ const Properties = () => {
               )}
             </>
           )}
+
+          {/* Floating Compare Button */}
+          {comparedProperties.length >= 2 && (
+            <div className="fixed bottom-8 right-8 z-50">
+              <Button size="lg" className="bg-blue-600 text-white shadow-lg" onClick={() => setCompareModalOpen(true)}>
+                Compare ({comparedProperties.length})
+              </Button>
+            </div>
+          )}
         </div>
       </section>
+
+      {/* Comparison Modal */}
+      <Dialog open={compareModalOpen} onOpenChange={setCompareModalOpen}>
+        <DialogContent className="max-w-5xl w-full">
+          <DialogHeader>
+            <DialogTitle>Compare Properties</DialogTitle>
+          </DialogHeader>
+          <div className="overflow-x-auto">
+            <table className="min-w-full border">
+              <thead>
+                <tr>
+                  <th className="p-2 border-b">Feature</th>
+                  {comparedProperties.map(id => {
+                    const prop = filteredProperties.find(p => p.id === id) || properties.find(p => p.id === id);
+                    return (
+                      <th key={id} className="p-2 border-b text-center">
+                        <div className="flex flex-col items-center">
+                          <img src={prop?.photo_url || '/placeholder.svg'} alt={prop?.title} className="w-24 h-20 object-cover rounded mb-2" />
+                          <span className="font-semibold">{prop?.title}</span>
+                          <button className="text-xs text-red-500 mt-1" onClick={() => setComparedProperties(prev => prev.filter(pid => pid !== id))}>Remove</button>
+                        </div>
+                      </th>
+                    );
+                  })}
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td className="p-2 font-medium">Price</td>
+                  {comparedProperties.map(id => {
+                    const prop = filteredProperties.find(p => p.id === id) || properties.find(p => p.id === id);
+                    return <td key={id} className="p-2 text-center">₦{prop?.price?.toLocaleString()}</td>;
+                  })}
+                </tr>
+                <tr>
+                  <td className="p-2 font-medium">Location</td>
+                  {comparedProperties.map(id => {
+                    const prop = filteredProperties.find(p => p.id === id) || properties.find(p => p.id === id);
+                    return <td key={id} className="p-2 text-center">{prop?.location}</td>;
+                  })}
+                </tr>
+                <tr>
+                  <td className="p-2 font-medium">Bedrooms</td>
+                  {comparedProperties.map(id => {
+                    const prop = filteredProperties.find(p => p.id === id) || properties.find(p => p.id === id);
+                    return <td key={id} className="p-2 text-center">{prop?.bedrooms}</td>;
+                  })}
+                </tr>
+                <tr>
+                  <td className="p-2 font-medium">Bathrooms</td>
+                  {comparedProperties.map(id => {
+                    const prop = filteredProperties.find(p => p.id === id) || properties.find(p => p.id === id);
+                    return <td key={id} className="p-2 text-center">{prop?.bathrooms}</td>;
+                  })}
+                </tr>
+                <tr>
+                  <td className="p-2 font-medium">Amenities</td>
+                  {comparedProperties.map(id => {
+                    const prop = filteredProperties.find(p => p.id === id) || properties.find(p => p.id === id);
+                    return <td key={id} className="p-2 text-center">{prop?.amenities?.join(', ') || '-'}</td>;
+                  })}
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   );
 

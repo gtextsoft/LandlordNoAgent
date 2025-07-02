@@ -106,6 +106,9 @@ const EnhancedNavigation = ({
     { name: 'Browse', href: '/properties', icon: Building, active: isActive('/properties') },
     ...(profile ? [
       { name: 'Saved', href: '/saved-properties', icon: Heart, active: isActive('/saved-properties') },
+      ...(!hasRole('landlord') ? [
+        { name: 'Applications', href: '/my-applications', icon: User, active: isActive('/my-applications') }
+      ] : []),
       { name: 'Messages', href: '/messages', icon: MessageCircle, active: isActive('/messages'), badge: 2 },
       ...(hasRole('landlord') ? [
         { name: 'Dashboard', href: '/landlord', icon: Home, active: isActive('/landlord') }

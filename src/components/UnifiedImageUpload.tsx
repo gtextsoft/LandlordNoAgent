@@ -8,7 +8,8 @@ import { Upload, X, ImageIcon, Plus, User as UserIcon } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
-import { compressImage, validateImageFile, handleError, handleSuccess } from '@/utils/shared';
+import { compressImage, validateImageFile } from '@/utils/shared';
+import { handleError, handleSuccess } from '@/utils/errorHandling';
 
 interface UnifiedImageUploadProps {
   // Common props

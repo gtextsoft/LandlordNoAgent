@@ -62,7 +62,7 @@ import { supabase, Profile, Property } from "@/lib/supabase";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { useLoadingState } from "@/hooks/useLoadingState";
-import { handleError, handleSuccess } from "@/utils/shared";
+import { handleError, handleSuccess } from "@/utils/errorHandling";
 import { motion } from "framer-motion";
 import DashboardHeader from "./DashboardHeader";
 import PropertyReviewPanel from "./PropertyReviewPanel";
@@ -229,8 +229,11 @@ const AdminDashboard = () => {
     }
   };
 
-  const fetchUsers = async () => {
+  const fetchUsers = async (page: number = 1, pageSize: number = 50) => {
     try {
+      const from = (page - 1) * pageSize;
+      const to = from + pageSize - 1;
+      
       const { data, error } = await supabase
         .from('profiles')
         .select(`
@@ -240,6 +243,7 @@ const AdminDashboard = () => {
           chat_rooms_as_renter:chat_rooms!chat_rooms_renter_id_fkey(id),
           chat_rooms_as_landlord:chat_rooms!chat_rooms_landlord_id_fkey(id)
         `)
+        .range(from, to)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -285,20 +289,43 @@ const AdminDashboard = () => {
     }
   };
 
-  const fetchProperties = async () => {
+  const fetchProperties = async (page: number = 1, pageSize: number = 50) => {
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('properties')
         .select(`
           *,
-          profiles:profiles!properties_landlord_id_fkey(full_name, email)
-        `)
+          profiles!properties_landlord_id_fkey (
+            full_name,
+            email
+          )
+        `, { count: 'exact' });
+
+      // Apply status filter if not showing all
+      if (propertyFilter !== 'all') {
+        query = query.eq('status', propertyFilter);
+      }
+
+      // Apply search filter if there's a search term
+      if (searchTerm) {
+        query = query.or(`title.ilike.%${searchTerm}%,location.ilike.%${searchTerm}%`);
+      }
+
+      // Add pagination
+      query = query
+        .range((page - 1) * pageSize, page * pageSize - 1)
         .order('created_at', { ascending: false });
 
+      const { data, error, count } = await query;
+
       if (error) throw error;
+
       setProperties(data || []);
+      return { data, count };
     } catch (error) {
       console.error('Error fetching properties:', error);
+      handleError(error, toast, "Failed to fetch properties", { context: 'AdminDashboard.fetchProperties' });
+      return { data: [], count: 0 };
     }
   };
 
@@ -306,26 +333,20 @@ const AdminDashboard = () => {
     try {
       switch (action) {
         case 'activate':
-          // For activate, we could potentially remove any suspension or add a flag
-          // Since we don't have a status field in profiles, we'll update updated_at to mark activity
           await supabase
             .from('profiles')
             .update({ updated_at: new Date().toISOString() })
             .eq('id', userId);
-          handleSuccess(toast, 'User activated successfully');
+          handleSuccess('User activated successfully', toast);
           break;
         case 'deactivate':
-          // For deactivate, we could set a deactivated flag or handle it in business logic
-          // Currently just updating the timestamp to track the action
           await supabase
             .from('profiles')
             .update({ updated_at: new Date().toISOString() })
             .eq('id', userId);
-          handleSuccess(toast, 'User deactivated successfully');
+          handleSuccess('User deactivated successfully', toast);
           break;
         case 'delete':
-          // Handle user deletion carefully - this will cascade to related data
-          // First check if user has properties or messages
           const { data: userProperties } = await supabase
             .from('properties')
             .select('id')
@@ -345,11 +366,11 @@ const AdminDashboard = () => {
             .delete()
             .eq('id', userId);
           
-          handleSuccess(toast, 'User deleted successfully');
+          handleSuccess('User deleted successfully', toast);
           break;
       }
       await fetchUsers();
-      await fetchStats(); // Refresh stats after user changes
+      await fetchStats();
     } catch (error: any) {
       handleError(error, toast, `Failed to ${action} user`);
     }
@@ -377,7 +398,7 @@ const AdminDashboard = () => {
             .eq('id', propertyId);
           break;
       }
-      handleSuccess(toast, `Property ${action}d successfully`);
+      handleSuccess(`Property ${action}d successfully`, toast);
       await fetchProperties();
       await fetchStats();
     } catch (error: any) {
@@ -438,10 +459,16 @@ const AdminDashboard = () => {
       link.click();
       document.body.removeChild(link);
       
-      handleSuccess(toast, 'Data exported successfully');
+      handleSuccess('Data exported successfully', toast);
     } catch (error) {
       handleError(error, toast, 'Failed to export data');
     }
+  };
+
+  // Add property filter change handler
+  const handlePropertyFilterChange = (value: string) => {
+    setPropertyFilter(value);
+    fetchProperties(1, 50); // Reset to first page when filter changes
   };
 
   if (loading) {
@@ -818,7 +845,7 @@ const AdminDashboard = () => {
                   className="pl-10 w-64"
                 />
               </div>
-              <Select value={propertyFilter} onValueChange={setPropertyFilter}>
+              <Select value={propertyFilter} onValueChange={handlePropertyFilterChange}>
                 <SelectTrigger className="w-32">
                   <SelectValue />
                 </SelectTrigger>

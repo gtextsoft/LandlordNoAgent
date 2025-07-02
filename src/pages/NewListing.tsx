@@ -24,7 +24,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
 import { useLoadingState } from "@/hooks/useLoadingState";
-import { handleError, handleSuccess } from "@/utils/shared";
+import { handleError, handleSuccess } from "@/utils/errorHandling";
 import UnifiedImageUpload from "@/components/UnifiedImageUpload";
 import Layout from "@/components/Layout";
 import { Link } from "react-router-dom";

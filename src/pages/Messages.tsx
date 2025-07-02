@@ -10,7 +10,7 @@ import { supabase } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import Layout from "@/components/Layout";
-import { handleError } from "@/utils/shared";
+import { handleError } from "@/utils/errorHandling";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const Messages = () => {

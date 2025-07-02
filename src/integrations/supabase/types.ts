@@ -139,6 +139,7 @@ export type Database = {
           id: string
           role: Database["public"]["Enums"]["user_role"]
           updated_at: string | null
+          last_sign_in_at: string | null
         }
         Insert: {
           avatar_url?: string | null
@@ -148,6 +149,7 @@ export type Database = {
           id: string
           role: Database["public"]["Enums"]["user_role"]
           updated_at?: string | null
+          last_sign_in_at?: string | null
         }
         Update: {
           avatar_url?: string | null
@@ -157,6 +159,7 @@ export type Database = {
           id?: string
           role?: Database["public"]["Enums"]["user_role"]
           updated_at?: string | null
+          last_sign_in_at?: string | null
         }
         Relationships: []
       }
@@ -322,6 +325,66 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      rental_applications: {
+        Row: {
+          id: string;
+          property_id: string;
+          renter_id: string;
+          full_name: string;
+          email: string;
+          phone: string | null;
+          employment_info: string | null;
+          references_info: string | null;
+          status: string;
+          document_urls: string[] | null;
+          created_at: string | null;
+          updated_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          property_id: string;
+          renter_id: string;
+          full_name: string;
+          email: string;
+          phone?: string | null;
+          employment_info?: string | null;
+          references_info?: string | null;
+          status?: string;
+          document_urls?: string[] | null;
+          created_at?: string | null;
+          updated_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          property_id?: string;
+          renter_id?: string;
+          full_name?: string;
+          email?: string;
+          phone?: string | null;
+          employment_info?: string | null;
+          references_info?: string | null;
+          status?: string;
+          document_urls?: string[] | null;
+          created_at?: string | null;
+          updated_at?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "rental_applications_property_id_fkey",
+            columns: ["property_id"],
+            isOneToOne: false,
+            referencedRelation: "properties",
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rental_applications_renter_id_fkey",
+            columns: ["renter_id"],
+            isOneToOne: false,
+            referencedRelation: "profiles",
+            referencedColumns: ["id"]
+          }
+        ];
       }
     }
     Views: {

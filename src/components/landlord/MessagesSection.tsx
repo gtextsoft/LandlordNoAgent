@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { Link } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -34,6 +34,8 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/lib/supabase";
+import { LoadingSpinner, ListLoadingSkeleton } from "@/components/ui/loading-state";
+import { handleError, handleSuccess } from "@/utils/errorHandling";
 
 interface ChatRoom {
   id: string;
@@ -74,17 +76,20 @@ const MessagesSection = ({ chatRooms = [], loading = false }: MessagesSectionPro
   
   const { toast } = useToast();
 
-  // Filter chat rooms
-  const filteredChatRooms = chatRooms.filter(room => {
-    const matchesSearch = 
-      room.renter_profile?.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      room.properties?.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      room.properties?.location?.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    const matchesStatus = statusFilter === 'all' || room.status === statusFilter;
-    
-    return matchesSearch && matchesStatus;
-  });
+  // Memoized filter for better performance
+  const filteredChatRooms = useMemo(() => {
+    return chatRooms.filter(room => {
+      const searchLower = searchTerm.toLowerCase();
+      const matchesSearch = !searchTerm || 
+        room.renter_profile?.full_name?.toLowerCase().includes(searchLower) ||
+        room.properties?.title?.toLowerCase().includes(searchLower) ||
+        room.properties?.location?.toLowerCase().includes(searchLower);
+      
+      const matchesStatus = statusFilter === 'all' || room.status === statusFilter;
+      
+      return matchesSearch && matchesStatus;
+    });
+  }, [chatRooms, searchTerm, statusFilter]);
 
   const getStatusBadge = (status?: string) => {
     switch (status) {
@@ -119,7 +124,7 @@ const MessagesSection = ({ chatRooms = [], loading = false }: MessagesSectionPro
     return `${Math.floor(diffInMinutes / 1440)}d ago`;
   };
 
-  const handleQuickReply = async (chatRoomId: string) => {
+  const handleQuickReply = useCallback(async (chatRoomId: string) => {
     if (!quickReplyText.trim()) return;
     
     setSendingReply(true);
@@ -138,9 +143,8 @@ const MessagesSection = ({ chatRooms = [], loading = false }: MessagesSectionPro
 
       if (error) throw error;
       
-      toast({
+      handleSuccess("Your reply has been sent successfully.", toast, {
         title: "Message Sent",
-        description: "Your reply has been sent successfully.",
       });
       
       setQuickReplyText("");
@@ -149,48 +153,29 @@ const MessagesSection = ({ chatRooms = [], loading = false }: MessagesSectionPro
       // Optionally refresh the chat rooms to show the new message
       // This would require a callback prop to refresh parent data
     } catch (error: any) {
-      console.error('Error sending message:', error);
-      toast({
-        title: "Failed to Send",
-        description: "There was an error sending your message. Please try again.",
-        variant: "destructive",
-      });
+      handleError(error, toast, "There was an error sending your message. Please try again.");
     } finally {
       setSendingReply(false);
     }
-  };
+  }, [quickReplyText, toast]);
 
   const getInitials = (name?: string) => {
     if (!name) return "?";
     return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
   };
 
-  // Loading skeleton
+  // Loading state with standardized component
   if (loading) {
     return (
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle className="flex items-center">
-              <MessageCircle className="w-5 h-5 mr-2" />
-              Recent Messages
-            </CardTitle>
-            <div className="h-8 bg-gray-200 rounded w-20 animate-pulse"></div>
-          </div>
+          <CardTitle className="flex items-center">
+            <MessageCircle className="w-5 h-5 mr-2" />
+            Recent Messages
+          </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="flex items-center space-x-4 p-4 border rounded-lg animate-pulse">
-                <div className="w-12 h-12 bg-gray-200 rounded-full"></div>
-                <div className="flex-1 space-y-2">
-                  <div className="h-4 bg-gray-200 rounded w-3/4"></div>
-                  <div className="h-3 bg-gray-200 rounded w-1/2"></div>
-                </div>
-                <div className="h-6 bg-gray-200 rounded w-16"></div>
-              </div>
-            ))}
-          </div>
+          <ListLoadingSkeleton items={3} className="space-y-4" />
         </CardContent>
       </Card>
     );

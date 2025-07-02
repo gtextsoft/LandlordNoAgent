@@ -22,6 +22,8 @@ import Contact from "./pages/Contact";
 import Properties from "./pages/Properties";
 import Messages from "./pages/Messages";
 import LandlordProperties from "./pages/LandlordProperties";
+import LandlordPropertyDetail from './pages/LandlordPropertyDetail';
+import RenterPropertyDetail from './pages/RenterPropertyDetail';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -110,7 +112,7 @@ function AppContent() {
           path="/property/:id"
           element={
             <ProtectedRoute>
-              <PropertyDetail />
+              <PropertyDetailRouter />
             </ProtectedRoute>
           }
         />
@@ -182,6 +184,15 @@ function AppContent() {
       </Routes>
     </BrowserRouter>
   );
+}
+
+function PropertyDetailRouter() {
+  const { hasRole } = useAuth();
+  if (hasRole('landlord')) {
+    return <LandlordPropertyDetail />;
+  } else {
+    return <RenterPropertyDetail />;
+  }
 }
 
 const App = () => (

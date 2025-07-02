@@ -5,15 +5,34 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Shield, CheckCircle, XCircle, AlertTriangle, Eye, MapPin, Bed, Bath, Clock, User, Search } from "lucide-react";
+import { 
+  Shield, 
+  CheckCircle, 
+  XCircle, 
+  AlertTriangle, 
+  Eye, 
+  MapPin, 
+  Bed, 
+  Bath, 
+  Clock, 
+  User, 
+  Search,
+  Home,
+  Edit,
+  Trash2,
+  Filter,
+  RefreshCw,
+  DollarSign
+} from "lucide-react";
 import { supabase, Property } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { motion, AnimatePresence } from "framer-motion";
 
-interface PropertyWithLandlord extends Property {
+interface PropertyWithLandlord extends Omit<Property, 'profiles'> {
   profiles?: {
     full_name: string;
     email: string;
@@ -30,7 +49,20 @@ interface ReviewData {
   verificationScore: number;
 }
 
+const commonConcerns = [
+  "Incomplete information",
+  "Missing photos",
+  "Unrealistic price",
+  "Suspicious listing",
+  "Poor quality photos",
+  "Inaccurate location",
+  "Misleading description",
+  "Missing contact details"
+];
+
 const PropertyReviewPanel = () => {
+  const [activeTab, setActiveTab] = useState("review");
+  const [allProperties, setAllProperties] = useState<PropertyWithLandlord[]>([]);
   const [properties, setProperties] = useState<PropertyWithLandlord[]>([]);
   const [selectedProperty, setSelectedProperty] = useState<PropertyWithLandlord | null>(null);
   const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
@@ -49,9 +81,54 @@ const PropertyReviewPanel = () => {
   const { toast } = useToast();
   const { profile } = useAuth();
 
+  // Filter properties based on search term and status
+  const filteredProperties = (activeTab === "review" ? properties : allProperties).filter(property => {
+    const matchesSearch = searchTerm.toLowerCase() === "" || 
+      property.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      property.location?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      property.profiles?.full_name?.toLowerCase().includes(searchTerm.toLowerCase());
+
+    const matchesStatus = statusFilter === "all" || property.status === statusFilter;
+
+    return matchesSearch && matchesStatus;
+  });
+
   useEffect(() => {
-    fetchPendingProperties();
-  }, []);
+    if (activeTab === "review") {
+      fetchPendingProperties();
+    } else {
+      fetchAllProperties();
+    }
+  }, [activeTab]);
+
+  const fetchAllProperties = async () => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('properties')
+        .select(`
+          *,
+          profiles!properties_landlord_id_fkey (
+            full_name,
+            email,
+            avatar_url
+          )
+        `)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setAllProperties(data || []);
+    } catch (error) {
+      console.error('Error fetching all properties:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load properties",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const fetchPendingProperties = async () => {
     setLoading(true);
@@ -180,30 +257,50 @@ const PropertyReviewPanel = () => {
     }
   };
 
-  const filteredProperties = properties.filter(property => {
-    const matchesSearch = property.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         property.location?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         property.profiles?.full_name?.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = statusFilter === 'all' || property.status === statusFilter;
-    return matchesSearch && matchesStatus;
-  });
+  const handleEdit = (property: PropertyWithLandlord) => {
+    // Navigate to edit page or open edit modal
+    window.location.href = `/admin/properties/${property.id}/edit`;
+  };
 
-  const commonConcerns = [
-    "Suspicious pricing",
-    "Poor quality images", 
-    "Incomplete information",
-    "Duplicate listing",
-    "Unrealistic claims",
-    "Missing contact details",
-    "Fake location",
-    "Too good to be true"
-  ];
+  const handleDelete = async (property: PropertyWithLandlord) => {
+    if (!confirm(`Are you sure you want to delete "${property.title}"? This action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('properties')
+        .delete()
+        .eq('id', property.id);
+
+      if (error) throw error;
+
+      toast({
+        title: "Property Deleted",
+        description: "The property has been successfully deleted.",
+      });
+
+      // Refresh the properties list
+      if (activeTab === "review") {
+        await fetchPendingProperties();
+      } else {
+        await fetchAllProperties();
+      }
+    } catch (error) {
+      console.error('Error deleting property:', error);
+      toast({
+        title: "Error",
+        description: "Failed to delete property",
+        variant: "destructive",
+      });
+    }
+  };
 
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <RefreshCw className="w-8 h-8 text-blue-600 animate-spin mx-auto mb-4" />
           <p className="text-gray-600">Loading properties for review...</p>
         </div>
       </div>
@@ -216,167 +313,350 @@ const PropertyReviewPanel = () => {
         <div>
           <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
             <Shield className="w-7 h-7 text-blue-600" />
-            Property Review Center
+            Property Management Center
           </h2>
-          <p className="text-gray-600 mt-1">Review and verify properties before they go live</p>
+          <p className="text-gray-600 mt-1">Manage and review all properties on the platform</p>
         </div>
         <Badge variant="secondary" className="px-3 py-1">
-          {filteredProperties.length} Pending Review
+          {filteredProperties.length} {activeTab === "review" ? "Pending Review" : "Properties"}
         </Badge>
       </div>
 
-      <Card>
-        <CardContent className="pt-6">
-          <div className="flex items-center gap-4">
-            <div className="relative flex-1">
-              <Search className="w-4 h-4 absolute left-3 top-3 text-gray-400" />
-              <Input
-                placeholder="Search by property title, location, or landlord..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10"
-              />
-            </div>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-48">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Statuses</SelectItem>
-                <SelectItem value="pending">Pending</SelectItem>
-                <SelectItem value="under_review">Under Review</SelectItem>
-                <SelectItem value="flagged">Flagged</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </CardContent>
-      </Card>
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+        <TabsList>
+          <TabsTrigger value="review" className="flex items-center gap-2">
+            <Shield className="w-4 h-4" />
+            Review Center
+          </TabsTrigger>
+          <TabsTrigger value="manage" className="flex items-center gap-2">
+            <Home className="w-4 h-4" />
+            All Properties
+          </TabsTrigger>
+        </TabsList>
 
-      <div className="grid gap-6">
-        <AnimatePresence>
-          {filteredProperties.map((property, index) => {
-            const verificationScore = calculateVerificationScore(property);
-            const scoreBadge = getScoreBadge(verificationScore);
-            
-            return (
-              <motion.div
-                key={property.id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-                transition={{ delay: index * 0.1 }}
-              >
-                <Card className="overflow-hidden hover:shadow-lg transition-shadow">
-                  <CardContent className="p-6">
-                    <div className="flex gap-6">
-                      <div className="w-48 h-32 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0">
-                        <img
-                          src={property.photo_url || "/placeholder.svg"}
-                          alt={property.title}
-                          className="w-full h-full object-cover"
-                        />
-                      </div>
-
-                      <div className="flex-1 space-y-3">
-                        <div className="flex items-start justify-between">
-                          <div>
-                            <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                              {property.title}
-                              <Badge variant={scoreBadge.variant}>
-                                {scoreBadge.label}
-                              </Badge>
-                            </h3>
-                            <p className="text-gray-600 flex items-center gap-1 mt-1">
-                              <MapPin className="w-4 h-4" />
-                              {property.location || "Location not specified"}
-                            </p>
-                          </div>
-                          <div className="text-right">
-                            <p className="text-2xl font-bold text-green-600">
-                              ₦{property.price.toLocaleString()}
-                            </p>
-                            <p className="text-sm text-gray-500">per year</p>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-6 text-sm text-gray-600">
-                          {property.bedrooms && (
-                            <span className="flex items-center gap-1">
-                              <Bed className="w-4 h-4" />
-                              {property.bedrooms} bed
-                            </span>
-                          )}
-                          {property.bathrooms && (
-                            <span className="flex items-center gap-1">
-                              <Bath className="w-4 h-4" />
-                              {property.bathrooms} bath
-                            </span>
-                          )}
-                          <span className="flex items-center gap-1">
-                            <Clock className="w-4 h-4" />
-                            {new Date(property.created_at).toLocaleDateString()}
-                          </span>
-                        </div>
-
-                        <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-                          <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                            <User className="w-5 h-5 text-blue-600" />
-                          </div>
-                          <div>
-                            <p className="font-medium">{property.profiles?.full_name || "Unknown Landlord"}</p>
-                            <p className="text-sm text-gray-600">{property.profiles?.email}</p>
-                          </div>
-                        </div>
-
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm font-medium">Verification Score</span>
-                            <span className={`text-sm font-bold ${getScoreColor(verificationScore)}`}>
-                              {verificationScore}/100
-                            </span>
-                          </div>
-                          <Progress value={verificationScore} className="h-2" />
-                        </div>
-                      </div>
-
-                      <div className="flex flex-col gap-2 justify-center">
-                        <Button
-                          onClick={() => handleReviewProperty(property)}
-                          className="bg-blue-600 hover:bg-blue-700 text-white"
-                        >
-                          <Shield className="w-4 h-4 mr-2" />
-                          Review
-                        </Button>
-                        <Button
-                          variant="outline"
-                          onClick={() => window.open(`/property/${property.id}`, '_blank')}
-                        >
-                          <Eye className="w-4 h-4 mr-2" />
-                          Preview
-                        </Button>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </motion.div>
-            );
-          })}
-        </AnimatePresence>
-
-        {filteredProperties.length === 0 && (
+        <TabsContent value="review">
           <Card>
-            <CardContent className="py-12 text-center">
-              <Shield className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">No Properties to Review</h3>
-              <p className="text-gray-600">
-                {searchTerm || statusFilter !== 'pending' 
-                  ? 'No properties match your current filters.' 
-                  : 'All properties have been reviewed!'}
-              </p>
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-4">
+                <div className="relative flex-1">
+                  <Search className="w-4 h-4 absolute left-3 top-3 text-gray-400" />
+                  <Input
+                    placeholder="Search by property title, location, or landlord..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-10"
+                  />
+                </div>
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger className="w-48">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Statuses</SelectItem>
+                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="under_review">Under Review</SelectItem>
+                    <SelectItem value="flagged">Flagged</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </CardContent>
           </Card>
-        )}
-      </div>
+
+          <div className="grid gap-6 mt-6">
+            <AnimatePresence>
+              {filteredProperties.map((property, index) => {
+                const verificationScore = calculateVerificationScore(property);
+                const scoreBadge = getScoreBadge(verificationScore);
+                
+                return (
+                  <motion.div
+                    key={property.id}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -20 }}
+                    transition={{ delay: index * 0.1 }}
+                  >
+                    <Card className="overflow-hidden hover:shadow-lg transition-shadow">
+                      <CardContent className="p-6">
+                        <div className="flex gap-6">
+                          <div className="w-48 h-32 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0">
+                            <img
+                              src={property.photo_url || "/placeholder.svg"}
+                              alt={property.title}
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+
+                          <div className="flex-1 space-y-3">
+                            <div className="flex items-start justify-between">
+                              <div>
+                                <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                                  {property.title}
+                                  <Badge variant={scoreBadge.variant}>
+                                    {scoreBadge.label}
+                                  </Badge>
+                                </h3>
+                                <p className="text-gray-600 flex items-center gap-1 mt-1">
+                                  <MapPin className="w-4 h-4" />
+                                  {property.location || "Location not specified"}
+                                </p>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-2xl font-bold text-green-600">
+                                  ₦{property.price.toLocaleString()}
+                                </p>
+                                <p className="text-sm text-gray-500">per year</p>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-6 text-sm text-gray-600">
+                              {property.bedrooms && (
+                                <span className="flex items-center gap-1">
+                                  <Bed className="w-4 h-4" />
+                                  {property.bedrooms} bed
+                                </span>
+                              )}
+                              {property.bathrooms && (
+                                <span className="flex items-center gap-1">
+                                  <Bath className="w-4 h-4" />
+                                  {property.bathrooms} bath
+                                </span>
+                              )}
+                              <span className="flex items-center gap-1">
+                                <Clock className="w-4 h-4" />
+                                {new Date(property.created_at).toLocaleDateString()}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                              <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                                <User className="w-5 h-5 text-blue-600" />
+                              </div>
+                              <div>
+                                <p className="font-medium">{property.profiles?.full_name || "Unknown Landlord"}</p>
+                                <p className="text-sm text-gray-600">{property.profiles?.email}</p>
+                              </div>
+                            </div>
+
+                            <div className="space-y-2">
+                              <div className="flex items-center justify-between">
+                                <span className="text-sm font-medium">Verification Score</span>
+                                <span className={`text-sm font-bold ${getScoreColor(verificationScore)}`}>
+                                  {verificationScore}/100
+                                </span>
+                              </div>
+                              <Progress value={verificationScore} className="h-2" />
+                            </div>
+                          </div>
+
+                          <div className="flex flex-col gap-2 justify-center">
+                            <Button
+                              onClick={() => handleReviewProperty(property)}
+                              className="bg-blue-600 hover:bg-blue-700 text-white"
+                            >
+                              <Shield className="w-4 h-4 mr-2" />
+                              Review
+                            </Button>
+                            <Button
+                              variant="outline"
+                              onClick={() => window.open(`/property/${property.id}`, '_blank')}
+                            >
+                              <Eye className="w-4 h-4 mr-2" />
+                              Preview
+                            </Button>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </motion.div>
+                );
+              })}
+            </AnimatePresence>
+
+            {filteredProperties.length === 0 && (
+              <Card>
+                <CardContent className="py-12 text-center">
+                  <Shield className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">No Properties to Review</h3>
+                  <p className="text-gray-600">
+                    {searchTerm || statusFilter !== 'pending' 
+                      ? 'No properties match your current filters.' 
+                      : 'All properties have been reviewed!'}
+                  </p>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        </TabsContent>
+
+        <TabsContent value="manage">
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-4">
+                <div className="relative flex-1">
+                  <Search className="w-4 h-4 absolute left-3 top-3 text-gray-400" />
+                  <Input
+                    placeholder="Search properties..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-10"
+                  />
+                </div>
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger className="w-48">
+                    <SelectValue placeholder="Filter by status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Properties</SelectItem>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="inactive">Inactive</SelectItem>
+                    <SelectItem value="rejected">Rejected</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button variant="outline" onClick={fetchAllProperties}>
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Refresh
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          <div className="grid gap-6 mt-6">
+            <AnimatePresence>
+              {allProperties
+                .filter(property => {
+                  const matchesSearch = property.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                                     property.location?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                                     property.profiles?.full_name?.toLowerCase().includes(searchTerm.toLowerCase());
+                  const matchesStatus = statusFilter === 'all' || property.status === statusFilter;
+                  return matchesSearch && matchesStatus;
+                })
+                .map((property, index) => (
+                  <motion.div
+                    key={property.id}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -20 }}
+                    transition={{ delay: index * 0.1 }}
+                  >
+                    <Card className="overflow-hidden hover:shadow-lg transition-shadow">
+                      <CardContent className="p-6">
+                        <div className="flex gap-6">
+                          <div className="w-48 h-32 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0">
+                            <img
+                              src={property.photo_url || "/placeholder.svg"}
+                              alt={property.title}
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+
+                          <div className="flex-1 space-y-3">
+                            <div className="flex items-start justify-between">
+                              <div>
+                                <h3 className="text-lg font-semibold text-gray-900">
+                                  {property.title}
+                                </h3>
+                                <p className="text-gray-600 flex items-center gap-1 mt-1">
+                                  <MapPin className="w-4 h-4" />
+                                  {property.location || "Location not specified"}
+                                </p>
+                              </div>
+                              <Badge variant={
+                                property.status === 'active' ? 'default' :
+                                property.status === 'pending' ? 'secondary' :
+                                property.status === 'rejected' ? 'destructive' :
+                                'outline'
+                              }>
+                                {property.status}
+                              </Badge>
+                            </div>
+
+                            <div className="flex items-center gap-6 text-sm text-gray-600">
+                              {property.bedrooms && (
+                                <span className="flex items-center gap-1">
+                                  <Bed className="w-4 h-4" />
+                                  {property.bedrooms} bed
+                                </span>
+                              )}
+                              {property.bathrooms && (
+                                <span className="flex items-center gap-1">
+                                  <Bath className="w-4 h-4" />
+                                  {property.bathrooms} bath
+                                </span>
+                              )}
+                              <span className="flex items-center gap-1">
+                                <Clock className="w-4 h-4" />
+                                {new Date(property.created_at).toLocaleDateString()}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                              <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                                <User className="w-5 h-5 text-blue-600" />
+                              </div>
+                              <div>
+                                <p className="font-medium">{property.profiles?.full_name || "Unknown Landlord"}</p>
+                                <p className="text-sm text-gray-600">{property.profiles?.email}</p>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex flex-col gap-2">
+                            <Button
+                              variant="outline"
+                              onClick={() => window.open(`/property/${property.id}`, '_blank')}
+                            >
+                              <Eye className="w-4 h-4 mr-2" />
+                              View
+                            </Button>
+                            <Button
+                              variant="outline"
+                              onClick={() => handleEdit(property)}
+                            >
+                              <Edit className="w-4 h-4 mr-2" />
+                              Edit
+                            </Button>
+                            {property.status === 'pending' && (
+                              <Button
+                                onClick={() => handleReviewProperty(property)}
+                                className="bg-blue-600 hover:bg-blue-700 text-white"
+                              >
+                                <Shield className="w-4 h-4 mr-2" />
+                                Review
+                              </Button>
+                            )}
+                            <Button
+                              variant="destructive"
+                              size="icon"
+                              onClick={() => handleDelete(property)}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </motion.div>
+                ))}
+            </AnimatePresence>
+
+            {allProperties.length === 0 && !loading && (
+              <Card>
+                <CardContent className="py-12 text-center">
+                  <Home className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">No Properties Found</h3>
+                  <p className="text-gray-600">
+                    {searchTerm || statusFilter !== 'all'
+                      ? 'No properties match your current filters.'
+                      : 'There are no properties in the system.'}
+                  </p>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        </TabsContent>
+      </Tabs>
 
       <Dialog open={reviewDialogOpen} onOpenChange={setReviewDialogOpen}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">

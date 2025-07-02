@@ -29,7 +29,7 @@ import { supabase, Property } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import Layout from "@/components/Layout";
-import { handleError, handleSuccess } from "@/utils/shared";
+import { handleError, handleSuccess } from "@/utils/errorHandling";
 
 const LandlordProperties = () => {
   const [properties, setProperties] = useState<Property[]>([]);

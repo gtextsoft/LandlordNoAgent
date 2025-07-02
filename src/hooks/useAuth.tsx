@@ -1,4 +1,3 @@
-
 import { useState, useEffect, createContext, useContext } from 'react'
 import { User, Session, AuthError } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
@@ -64,7 +63,31 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       
       if (error) {
         console.error('Error fetching user roles:', error)
+        
+        // Fallback: Try to get role from profile as a last resort
+        const profile = await fetchProfile(userId);
+        if (profile?.role) {
+          console.warn('Using profile role as fallback for user:', userId);
+          return [profile.role];
+        }
         return []
+      }
+      
+      // If RPC returns empty but user has profile role, sync them
+      if ((!data || data.length === 0)) {
+        const profile = await fetchProfile(userId);
+        if (profile?.role) {
+          console.log('Syncing profile role to user_roles table for user:', userId);
+          // Upsert the role into user_roles table for consistency
+          await supabase.from('user_roles').upsert({
+            user_id: userId,
+            role: profile.role
+          }, {
+            onConflict: 'user_id,role'
+          });
+          
+          return [profile.role];
+        }
       }
       
       return data || []
@@ -108,9 +131,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   }
 
   const hasRole = (role: string): boolean => {
-    // Fallback to profile.role if userRoles is empty
-    if (userRoles.length === 0 && profile?.role) {
-      return profile.role === role;
+    // Security Fix: Only rely on userRoles from RPC function
+    // Don't fallback to profile.role to prevent security gaps
+    if (!userRoles || userRoles.length === 0) {
+      console.warn('User roles not loaded yet or empty. Denying access.');
+      return false;
     }
     return userRoles.includes(role);
   }
@@ -243,12 +268,26 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const signIn = async (email: string, password: string) => {
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
         email,
-        password
+        password,
       })
-      return { error }
+
+      if (authError) {
+        return { error: authError }
+      }
+
+      // Update last_sign_in_at in profiles table
+      if (authData.user) {
+        await supabase
+          .from('profiles')
+          .update({ last_sign_in_at: new Date().toISOString() })
+          .eq('id', authData.user.id)
+      }
+
+      return { error: null }
     } catch (error) {
+      console.error('Error signing in:', error)
       return { error: error as AuthError }
     }
   }

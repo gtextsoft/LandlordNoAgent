@@ -8,7 +8,7 @@ import { ArrowLeft, Shield, Mail, Lock } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/lib/supabase";
-import { handleError, handleSuccess } from "@/utils/shared";
+import { handleError, handleSuccess } from "@/utils/errorHandling";
 
 const AdminLogin = () => {
   const [email, setEmail] = useState("");

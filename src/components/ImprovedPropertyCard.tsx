@@ -29,13 +29,17 @@ interface ImprovedPropertyCardProps {
   showActions?: boolean;
   variant?: 'default' | 'compact' | 'featured';
   showVirtualTour?: boolean;
+  onCompareChange?: (propertyId: string, checked: boolean) => void;
+  isCompared?: boolean;
 }
 
 const ImprovedPropertyCard = ({ 
   property, 
   showActions = true, 
   variant = 'default',
-  showVirtualTour = false 
+  showVirtualTour = false,
+  onCompareChange,
+  isCompared
 }: ImprovedPropertyCardProps) => {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [isHovered, setIsHovered] = useState(false);
@@ -118,6 +122,20 @@ const ImprovedPropertyCard = ({
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
+      {/* Compare Checkbox */}
+      {onCompareChange && (
+        <div className="absolute top-3 right-3 z-20">
+          <label className="flex items-center space-x-2 bg-white/80 px-2 py-1 rounded shadow">
+            <input
+              type="checkbox"
+              checked={!!isCompared}
+              onChange={e => onCompareChange(property.id, e.target.checked)}
+            />
+            <span className="text-xs font-medium">Compare</span>
+          </label>
+        </div>
+      )}
+
       {/* Image Gallery Section */}
       <div className={`relative ${getImageHeight()} overflow-hidden`}>
         {/* Main Image */}

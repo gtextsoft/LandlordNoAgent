@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from './useAuth';
 import { supabase } from '@/lib/supabase';
 import { useToast } from './use-toast';
-import { handleError, handleSuccess } from '@/utils/shared';
+import { handleError, handleSuccess } from '@/utils/errorHandling';
 import { useLoadingState } from './useLoadingState';
 
 export interface SavedProperty {

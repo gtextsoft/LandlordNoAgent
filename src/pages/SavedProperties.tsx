@@ -9,7 +9,7 @@ import PropertyCard from '@/components/PropertyCard';
 import LoadingSpinner from '@/components/LoadingSpinner';
 import Layout from '@/components/Layout';
 import { useLoadingState } from '@/hooks/useLoadingState';
-import { handleError } from '@/utils/shared';
+import { handleError } from '@/utils/errorHandling';
 import { useToast } from '@/hooks/use-toast';
 
 const SavedProperties = () => {

@@ -19,7 +19,7 @@ CREATE POLICY "Authenticated users can upload property images"
   ON storage.objects 
   FOR INSERT 
   WITH CHECK (
-    bucket_id = 'property-images' 
+    bucket_id = 'property-images'
     AND auth.role() = 'authenticated'
   );
 
