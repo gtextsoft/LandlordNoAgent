@@ -35,18 +35,18 @@ const Login = () => {
   const [passwordStrength, setPasswordStrength] = useState(0);
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { signUp, signIn, profile } = useAuth();
+  const { signUp, signIn, profile, hasRole } = useAuth();
 
   // Redirect if already logged in
   useEffect(() => {
     if (profile) {
-      if (profile.role === 'landlord') {
+      if (hasRole('landlord')) {
         navigate('/landlord');
       } else {
         navigate('/');
       }
     }
-  }, [profile, navigate]);
+  }, [profile, navigate, hasRole]);
 
   // Password strength checker
   useEffect(() => {

@@ -16,62 +16,89 @@ import {
   LineChart,
   Download,
   Filter,
-  RefreshCw
+  RefreshCw,
+  Building,
+  Activity,
+  Target,
+  Map
 } from "lucide-react";
 import { Property } from "@/lib/supabase";
-import { AnalyticsService } from "@/services/analyticsService";
+import { AnalyticsService, MarketInsights, FinancialMetrics, AnalyticsData } from "@/services/analyticsService";
 import { useAuth } from "@/hooks/useAuth";
+import { Chart } from "@/components/ui/chart";
 
 interface AnalyticsDashboardProps {
   properties: Property[];
-  chatRooms: any[];
-  stats: {
-    totalProperties: number;
-    activeProperties: number;
-    totalViews: number;
-    totalInquiries: number;
-    newInquiriesThisWeek: number;
-    monthlyRevenue: number;
-    occupancyRate: number;
-  };
   loading?: boolean;
 }
 
-const AnalyticsDashboard = ({ properties, chatRooms, stats, loading = false }: AnalyticsDashboardProps) => {
-  const [timeRange, setTimeRange] = useState("30d");
-  const [chartType, setChartType] = useState("revenue");
+type ChartType = "revenue" | "views" | "inquiries";
+
+const AnalyticsDashboard = ({ properties, loading = false }: AnalyticsDashboardProps) => {
+  const [timeRange, setTimeRange] = useState<"7d" | "30d" | "90d">("30d");
+  const [chartType, setChartType] = useState<ChartType>("revenue");
   const { profile } = useAuth();
 
-  // State for real chart data
-  const [chartData, setChartData] = useState<any[]>([]);
+  // State for real chart data with proper typing
+  const [chartData, setChartData] = useState<AnalyticsData[]>([]);
   const [chartLoading, setChartLoading] = useState(false);
 
-  // Property performance analysis using real data
-  const [propertyPerformance, setPropertyPerformance] = useState<any[]>([]);
-  const [financialMetrics, setFinancialMetrics] = useState<any>({});
-  const [marketInsights, setMarketInsights] = useState<any>({});
+  // State for enhanced analytics
+  const [marketInsights, setMarketInsights] = useState<MarketInsights>({
+    priceRanges: [],
+    averageRent: 0,
+    marketTrends: [],
+    competitorAnalysis: [],
+    demandHotspots: []
+  });
+
+  const [financialMetrics, setFinancialMetrics] = useState<FinancialMetrics>({
+    totalRevenue: 0,
+    averageRent: 0,
+    monthlyGrowth: 0,
+    yearlyProjection: 0,
+    operatingCosts: 0,
+    netOperatingIncome: 0,
+    cashOnCashReturn: 0,
+    occupancyRate: 0
+  });
 
   useEffect(() => {
     const loadAnalyticsData = async () => {
+      if (!properties.length || !profile?.id) return;
+
       try {
-        const performance = await AnalyticsService.getPropertyPerformance(properties);
-        const financial = AnalyticsService.getFinancialMetrics(properties);
-        const market = AnalyticsService.getMarketInsights(properties);
+        const insights = await AnalyticsService.getMarketInsights(properties);
+        const metrics = await AnalyticsService.getFinancialMetrics(properties);
         
-        setPropertyPerformance(performance);
-        setFinancialMetrics(financial);
-        setMarketInsights(market);
+        setMarketInsights(insights);
+        setFinancialMetrics(metrics);
       } catch (error) {
         console.error('Error loading analytics data:', error);
+        // Reset to default values on error
+        setMarketInsights({
+          priceRanges: [],
+          averageRent: 0,
+          marketTrends: [],
+          competitorAnalysis: [],
+          demandHotspots: []
+        });
+        setFinancialMetrics({
+          totalRevenue: 0,
+          averageRent: 0,
+          monthlyGrowth: 0,
+          yearlyProjection: 0,
+          operatingCosts: 0,
+          netOperatingIncome: 0,
+          cashOnCashReturn: 0,
+          occupancyRate: 0
+        });
       }
     };
 
-    if (properties.length > 0) {
-      loadAnalyticsData();
-    }
-  }, [properties]);
+    loadAnalyticsData();
+  }, [properties, profile?.id]);
 
-  // Load chart data when chart type or time range changes
   useEffect(() => {
     const loadChartData = async () => {
       if (!profile?.id) return;
@@ -91,15 +118,9 @@ const AnalyticsDashboard = ({ properties, chatRooms, stats, loading = false }: A
     loadChartData();
   }, [chartType, timeRange, profile?.id]);
 
-  // Use the calculated metrics
-  const totalRevenue = financialMetrics.totalRevenue || 0;
-  const averageRent = financialMetrics.averageRent || 0;
-  const monthlyGrowth = financialMetrics.monthlyGrowth || 0;
-  const yearlyProjection = financialMetrics.yearlyProjection || 0;
-  const priceRanges = marketInsights.priceRanges || [];
-
   const exportData = () => {
-    AnalyticsService.exportAnalyticsData(propertyPerformance, 'property-analytics');
+    if (!properties.length) return;
+    AnalyticsService.exportAnalyticsData(properties, 'property-analytics');
   };
 
   if (loading) {
@@ -121,7 +142,7 @@ const AnalyticsDashboard = ({ properties, chatRooms, stats, loading = false }: A
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {/* Analytics Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
@@ -129,7 +150,9 @@ const AnalyticsDashboard = ({ properties, chatRooms, stats, loading = false }: A
           <p className="text-gray-600">Comprehensive insights into your property performance</p>
         </div>
         <div className="flex items-center gap-3">
-          <Select value={timeRange} onValueChange={setTimeRange}>
+          <Select 
+            value={timeRange} 
+            onValueChange={(value: "7d" | "30d" | "90d") => setTimeRange(value)}>
             <SelectTrigger className="w-32">
               <Calendar className="w-4 h-4 mr-2" />
               <SelectValue />
@@ -147,17 +170,17 @@ const AnalyticsDashboard = ({ properties, chatRooms, stats, loading = false }: A
         </div>
       </div>
 
-      {/* Key Performance Indicators */}
+      {/* Financial Overview */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <Card className="bg-gradient-to-r from-blue-500 to-blue-600 text-white">
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-blue-100">Total Revenue</p>
-                <p className="text-3xl font-bold">₦{totalRevenue.toLocaleString()}</p>
+                <p className="text-3xl font-bold">₦{financialMetrics.totalRevenue.toLocaleString()}</p>
                 <div className="flex items-center mt-2">
                   <TrendingUp className="w-4 h-4 mr-1" />
-                  <span className="text-sm">+{monthlyGrowth}% this month</span>
+                  <span className="text-sm">+{financialMetrics.monthlyGrowth.toFixed(1)}% this month</span>
                 </div>
               </div>
               <DollarSign className="w-12 h-12 text-blue-200" />
@@ -169,14 +192,14 @@ const AnalyticsDashboard = ({ properties, chatRooms, stats, loading = false }: A
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-green-100">Average Rent</p>
-                <p className="text-3xl font-bold">₦{Math.round(averageRent).toLocaleString()}</p>
+                <p className="text-green-100">Net Operating Income</p>
+                <p className="text-3xl font-bold">₦{financialMetrics.netOperatingIncome.toLocaleString()}</p>
                 <div className="flex items-center mt-2">
-                  <TrendingUp className="w-4 h-4 mr-1" />
-                  <span className="text-sm">Above market avg</span>
+                  <Activity className="w-4 h-4 mr-1" />
+                  <span className="text-sm">ROI: {financialMetrics.cashOnCashReturn.toFixed(1)}%</span>
                 </div>
               </div>
-              <BarChart3 className="w-12 h-12 text-green-200" />
+              <Building className="w-12 h-12 text-green-200" />
             </div>
           </CardContent>
         </Card>
@@ -186,19 +209,19 @@ const AnalyticsDashboard = ({ properties, chatRooms, stats, loading = false }: A
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-purple-100">Occupancy Rate</p>
-                <p className="text-3xl font-bold">{stats.occupancyRate}%</p>
+                <p className="text-3xl font-bold">{financialMetrics.occupancyRate.toFixed(1)}%</p>
                 <div className="flex items-center mt-2">
-                  {stats.occupancyRate >= 80 ? (
+                  {financialMetrics.occupancyRate >= 80 ? (
                     <TrendingUp className="w-4 h-4 mr-1" />
                   ) : (
                     <TrendingDown className="w-4 h-4 mr-1" />
                   )}
                   <span className="text-sm">
-                    {stats.occupancyRate >= 80 ? 'Excellent' : 'Room for improvement'}
+                    {financialMetrics.occupancyRate >= 80 ? 'Excellent' : 'Room for improvement'}
                   </span>
                 </div>
               </div>
-              <PieChart className="w-12 h-12 text-purple-200" />
+              <Target className="w-12 h-12 text-purple-200" />
             </div>
           </CardContent>
         </Card>
@@ -207,14 +230,14 @@ const AnalyticsDashboard = ({ properties, chatRooms, stats, loading = false }: A
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-orange-100">Yearly Projection</p>
-                <p className="text-3xl font-bold">₦{(yearlyProjection / 1000000).toFixed(1)}M</p>
+                <p className="text-orange-100">Market Performance</p>
+                <p className="text-3xl font-bold">{marketInsights.marketTrends[0]?.value.toFixed(1)}%</p>
                 <div className="flex items-center mt-2">
-                  <TrendingUp className="w-4 h-4 mr-1" />
-                  <span className="text-sm">Based on current trend</span>
+                  <Map className="w-4 h-4 mr-1" />
+                  <span className="text-sm">vs Market Average</span>
                 </div>
               </div>
-              <LineChart className="w-12 h-12 text-orange-200" />
+              <PieChart className="w-12 h-12 text-orange-200" />
             </div>
           </CardContent>
         </Card>
@@ -222,217 +245,89 @@ const AnalyticsDashboard = ({ properties, chatRooms, stats, loading = false }: A
 
       {/* Charts Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Performance Chart */}
-        <Card className="lg:col-span-2">
+        {/* Revenue Chart */}
+        <Card>
           <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle className="flex items-center">
-                <BarChart3 className="w-5 h-5 mr-2" />
-                Performance Trends
-              </CardTitle>
-              <Select value={chartType} onValueChange={setChartType}>
-                <SelectTrigger className="w-40">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="revenue">Revenue</SelectItem>
-                  <SelectItem value="views">Property Views</SelectItem>
-                  <SelectItem value="inquiries">Inquiries</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            <CardTitle>Revenue Trends</CardTitle>
           </CardHeader>
           <CardContent>
-            {chartLoading ? (
-              <div className="h-64 flex items-center justify-center">
-                <RefreshCw className="w-8 h-8 animate-spin text-blue-600" />
-              </div>
-            ) : chartData.length === 0 ? (
-              <div className="h-64 flex items-center justify-center">
-                <div className="text-center text-gray-500">
-                  <BarChart3 className="w-12 h-12 mx-auto mb-2 text-gray-300" />
-                  <p>No data available for the selected period</p>
-                  <p className="text-sm">Data will appear as your properties receive activity</p>
+            <div className="h-[300px]">
+              <Chart
+                type="line"
+                data={chartData}
+                loading={chartLoading}
+                xField="label"
+                yField="value"
+                seriesField="type"
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Market Insights */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Market Analysis</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div>
+                <h4 className="font-semibold mb-2">Price Distribution</h4>
+                <div className="grid grid-cols-2 gap-2">
+                  {marketInsights.priceRanges.map((range, i) => (
+                    <div key={i} className="flex items-center justify-between">
+                      <span className="text-sm text-gray-600">{range.range}</span>
+                      <Badge variant="secondary">{range.count}</Badge>
+                    </div>
+                  ))}
                 </div>
               </div>
-            ) : (
-              <div className="h-64 flex items-end justify-between space-x-1">
-                {chartData.map((point, index) => {
-                  const maxValue = Math.max(...chartData.map(d => d.value), 1);
-                  return (
-                    <div key={index} className="flex flex-col items-center flex-1 group">
-                      <div className="relative">
-                        <div 
-                          className="w-full bg-gradient-to-t from-blue-500 to-blue-300 rounded-t hover:from-blue-600 hover:to-blue-400 transition-colors cursor-pointer"
-                          style={{ 
-                            height: `${Math.max((point.value / maxValue) * 200, 8)}px`,
-                            minWidth: '12px'
-                          }}
-                          title={`${point.label}: ${point.value.toLocaleString()}`}
-                        ></div>
-                        <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
-                          {chartType === 'revenue' ? `₦${point.value.toLocaleString()}` : point.value.toLocaleString()}
-                        </div>
-                      </div>
-                      <span className="text-xs text-gray-500 mt-1 transform -rotate-45 origin-top-left">
-                        {point.label}
-                      </span>
+              
+              <div>
+                <h4 className="font-semibold mb-2">Top Locations</h4>
+                <div className="space-y-2">
+                  {marketInsights.demandHotspots.map((location, i) => (
+                    <div key={i} className="flex items-center justify-between">
+                      <span className="text-sm text-gray-600">{location.location}</span>
+                      <Progress value={location.score} className="w-24" />
                     </div>
-                  );
-                })}
+                  ))}
+                </div>
               </div>
-            )}
+            </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Property Performance Table */}
+      {/* Competitive Analysis */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center">
-            <Eye className="w-5 h-5 mr-2" />
-            Property Performance
-          </CardTitle>
+          <CardTitle>Competitive Analysis</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b">
-                  <th className="text-left p-3">Property</th>
-                  <th className="text-left p-3">Price</th>
-                  <th className="text-left p-3">Status</th>
-                  <th className="text-left p-3">Views</th>
-                  <th className="text-left p-3">Inquiries</th>
-                  <th className="text-left p-3">Conversion</th>
-                </tr>
-              </thead>
-              <tbody>
-                {propertyPerformance.slice(0, 10).map((property) => (
-                  <tr key={property.id} className="border-b hover:bg-gray-50">
-                    <td className="p-3">
-                      <div>
-                        <div className="font-medium">{property.title}</div>
-                        <div className="text-sm text-gray-600">{property.location}</div>
-                      </div>
-                    </td>
-                    <td className="p-3 font-medium">₦{property.price?.toLocaleString()}</td>
-                    <td className="p-3">
-                      <Badge variant={property.status === 'active' ? 'default' : 'secondary'}>
-                        {property.status}
-                      </Badge>
-                    </td>
-                    <td className="p-3">{property.views}</td>
-                    <td className="p-3">{property.inquiries}</td>
-                    <td className="p-3">
-                      <div className="flex items-center space-x-2">
-                        <span>{property.conversionRate}%</span>
-                        <div className="w-16 bg-gray-200 rounded-full h-2">
-                          <div 
-                            className="bg-blue-500 h-2 rounded-full" 
-                            style={{ width: `${property.conversionRate}%` }}
-                          ></div>
-                        </div>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {marketInsights.competitorAnalysis.map((metric, i) => (
+              <div key={i} className="p-4 border rounded-lg">
+                <h4 className="font-semibold text-sm text-gray-600">{metric.metric}</h4>
+                <p className="text-2xl font-bold mt-1">
+                  {metric.metric.includes('Price') ? '₦' : ''}{metric.value.toLocaleString()}
+                  {!metric.metric.includes('Price') ? '%' : ''}
+                </p>
+                <div className="flex items-center mt-2 text-sm">
+                  {metric.value > metric.benchmark ? (
+                    <TrendingUp className="w-4 h-4 text-green-500 mr-1" />
+                  ) : (
+                    <TrendingDown className="w-4 h-4 text-red-500 mr-1" />
+                  )}
+                  <span className={metric.value > metric.benchmark ? 'text-green-600' : 'text-red-600'}>
+                    vs {metric.benchmark.toLocaleString()} benchmark
+                  </span>
+                </div>
+              </div>
+            ))}
           </div>
         </CardContent>
       </Card>
-
-      {/* Market Analysis */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Price Distribution</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {priceRanges.map((range, index) => (
-                <div key={index} className="flex items-center justify-between">
-                  <span className="text-sm font-medium">{range.range}</span>
-                  <div className="flex items-center space-x-3">
-                    <div className="w-32 bg-gray-200 rounded-full h-2">
-                      <div 
-                        className="bg-gradient-to-r from-blue-500 to-indigo-600 h-2 rounded-full" 
-                        style={{ width: `${(range.count / properties.length) * 100}%` }}
-                      ></div>
-                    </div>
-                    <span className="text-sm text-gray-600 w-8">{range.count}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Insights & Recommendations</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {/* Dynamic insights based on real data */}
-              {priceRanges.length > 0 && (() => {
-                const bestPerformingRange = priceRanges.reduce((best, current) => 
-                  current.count > best.count ? current : best
-                );
-                return bestPerformingRange.count > 1 ? (
-                  <div className="p-4 bg-blue-50 rounded-lg border-l-4 border-blue-500">
-                    <h4 className="font-medium text-blue-900">Market Insight</h4>
-                    <p className="text-sm text-blue-800 mt-1">
-                      Most of your properties ({bestPerformingRange.count}) are in the {bestPerformingRange.range} range, 
-                      representing {bestPerformingRange.percentage}% of your portfolio.
-                    </p>
-                  </div>
-                ) : null;
-              })()}
-              
-              {stats.occupancyRate >= 75 ? (
-                <div className="p-4 bg-green-50 rounded-lg border-l-4 border-green-500">
-                  <h4 className="font-medium text-green-900">Strong Performance</h4>
-                  <p className="text-sm text-green-800 mt-1">
-                    Your occupancy rate of {stats.occupancyRate}% is {stats.occupancyRate >= 80 ? 'excellent and above' : 'above'} the market average of 75%.
-                  </p>
-                </div>
-              ) : (
-                <div className="p-4 bg-yellow-50 rounded-lg border-l-4 border-yellow-500">
-                  <h4 className="font-medium text-yellow-900">Improvement Opportunity</h4>
-                  <p className="text-sm text-yellow-800 mt-1">
-                    Your occupancy rate of {stats.occupancyRate}% is below the market average. Consider reviewing pricing or marketing strategy.
-                  </p>
-                </div>
-              )}
-              
-              {(() => {
-                const inactiveCount = properties.filter(p => p.status === 'inactive').length;
-                if (inactiveCount > 0) {
-                  return (
-                    <div className="p-4 bg-yellow-50 rounded-lg border-l-4 border-yellow-500">
-                      <h4 className="font-medium text-yellow-900">Action Required</h4>
-                      <p className="text-sm text-yellow-800 mt-1">
-                        {inactiveCount} {inactiveCount === 1 ? 'property is' : 'properties are'} inactive. 
-                        Reactivate to increase revenue potential.
-                      </p>
-                    </div>
-                  );
-                }
-                return (
-                  <div className="p-4 bg-green-50 rounded-lg border-l-4 border-green-500">
-                    <h4 className="font-medium text-green-900">All Systems Go</h4>
-                    <p className="text-sm text-green-800 mt-1">
-                      All your properties are active and available for rent. Great job!
-                    </p>
-                  </div>
-                );
-              })()}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
     </div>
   );
 };

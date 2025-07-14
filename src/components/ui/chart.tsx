@@ -353,6 +353,168 @@ function getPayloadConfigFromPayload(
     : config[key as keyof typeof config]
 }
 
+// Add new exports for specific chart types
+export const LineChart = RechartsPrimitive.LineChart;
+export const Line = RechartsPrimitive.Line;
+export const BarChart = RechartsPrimitive.BarChart;
+export const Bar = RechartsPrimitive.Bar;
+export const XAxis = RechartsPrimitive.XAxis;
+export const YAxis = RechartsPrimitive.YAxis;
+export const CartesianGrid = RechartsPrimitive.CartesianGrid;
+export const Legend = RechartsPrimitive.Legend;
+export const Area = RechartsPrimitive.Area;
+export const AreaChart = RechartsPrimitive.AreaChart;
+export const Tooltip = RechartsPrimitive.Tooltip;
+
+interface ChartProps {
+  type: 'line' | 'bar' | 'area';
+  data: any[];
+  loading?: boolean;
+  xField: string;
+  yField: string;
+  seriesField?: string;
+  height?: number;
+}
+
+export const Chart = React.forwardRef<HTMLDivElement, ChartProps>(
+  ({ type, data, loading = false, xField, yField, seriesField, height = 300, ...props }, ref) => {
+    const chartConfig: ChartConfig = {
+      primary: {
+        theme: {
+          light: "hsl(var(--primary))",
+          dark: "hsl(var(--primary))",
+        },
+      },
+      secondary: {
+        theme: {
+          light: "hsl(var(--secondary))",
+          dark: "hsl(var(--secondary))",
+        },
+      },
+      success: {
+        theme: {
+          light: "hsl(var(--success))",
+          dark: "hsl(var(--success))",
+        },
+      },
+      warning: {
+        theme: {
+          light: "hsl(var(--warning))",
+          dark: "hsl(var(--warning))",
+        },
+      },
+    };
+
+    if (loading) {
+      return (
+        <div className="flex items-center justify-center h-[300px]">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        </div>
+      );
+    }
+
+    const renderChart = () => {
+      const commonProps = {
+        data,
+        margin: { top: 5, right: 30, left: 20, bottom: 5 },
+      };
+
+      switch (type) {
+        case 'line':
+          return (
+            <LineChart {...commonProps}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey={xField} />
+              <YAxis />
+              <ChartTooltip content={<ChartTooltipContent />} />
+              <Legend />
+              {seriesField ? (
+                data.map((_, index) => (
+                  <Line
+                    key={index}
+                    type="monotone"
+                    dataKey={yField}
+                    stroke={`var(--color-${Object.keys(chartConfig)[index % Object.keys(chartConfig).length]})`}
+                    activeDot={{ r: 8 }}
+                  />
+                ))
+              ) : (
+                <Line
+                  type="monotone"
+                  dataKey={yField}
+                  stroke="var(--color-primary)"
+                  activeDot={{ r: 8 }}
+                />
+              )}
+            </LineChart>
+          );
+
+        case 'bar':
+          return (
+            <BarChart {...commonProps}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey={xField} />
+              <YAxis />
+              <ChartTooltip content={<ChartTooltipContent />} />
+              <Legend />
+              {seriesField ? (
+                data.map((_, index) => (
+                  <Bar
+                    key={index}
+                    dataKey={yField}
+                    fill={`var(--color-${Object.keys(chartConfig)[index % Object.keys(chartConfig).length]})`}
+                  />
+                ))
+              ) : (
+                <Bar dataKey={yField} fill="var(--color-primary)" />
+              )}
+            </BarChart>
+          );
+
+        case 'area':
+          return (
+            <AreaChart {...commonProps}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey={xField} />
+              <YAxis />
+              <ChartTooltip content={<ChartTooltipContent />} />
+              <Legend />
+              {seriesField ? (
+                data.map((_, index) => (
+                  <Area
+                    key={index}
+                    type="monotone"
+                    dataKey={yField}
+                    fill={`var(--color-${Object.keys(chartConfig)[index % Object.keys(chartConfig).length]})`}
+                    stroke={`var(--color-${Object.keys(chartConfig)[index % Object.keys(chartConfig).length]})`}
+                  />
+                ))
+              ) : (
+                <Area
+                  type="monotone"
+                  dataKey={yField}
+                  stroke="var(--color-primary)"
+                  fill="var(--color-primary)"
+                />
+              )}
+            </AreaChart>
+          );
+
+        default:
+          return null;
+      }
+    };
+
+    return (
+      <ChartContainer ref={ref} config={chartConfig} {...props}>
+        {renderChart()}
+      </ChartContainer>
+    );
+  }
+);
+
+Chart.displayName = "Chart";
+
 export {
   ChartContainer,
   ChartTooltip,

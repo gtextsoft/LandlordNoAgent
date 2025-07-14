@@ -19,6 +19,8 @@ import PropertyMapView from "@/components/PropertyMapView";
 import MobileOptimizedPropertyCard from "@/components/MobileOptimizedPropertyCard";
 import ResponsiveGrid from "@/components/ResponsiveGrid";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { withErrorBoundary, SectionErrorBoundary } from "@/utils/errorBoundaryUtils";
+
 
 const Properties = () => {
   const [properties, setProperties] = useState<Property[]>([]);
@@ -186,7 +188,7 @@ const Properties = () => {
         if (chatError) throw chatError;
         setChatRooms(chatData || []);
       }
-    } catch (error: any) {
+    } catch (error: Error | unknown) {
       handleError(error, toast, 'Error fetching data');
       // Initialize with empty arrays on error to maintain valid state
       setProperties([]);
@@ -606,7 +608,15 @@ const Properties = () => {
   if (profile) {
     return (
       <Layout>
-        <PropertiesContent />
+        <SectionErrorBoundary name="PropertiesContent" fallbackUI={
+          <div className="p-8 text-center">
+            <h2 className="text-xl font-semibold mb-4">Unable to load properties</h2>
+            <p className="mb-4">We're having trouble loading the properties. Please try again later.</p>
+            <Button onClick={() => window.location.reload()}>Reload Page</Button>
+          </div>
+        }>
+          <PropertiesContent />
+        </SectionErrorBoundary>
       </Layout>
     );
   }
@@ -615,9 +625,17 @@ const Properties = () => {
   return (
     <div className="min-h-screen bg-white">
       <PublicHeader />
-      <PropertiesContent />
+      <SectionErrorBoundary name="PublicPropertiesContent">
+        <PropertiesContent />
+      </SectionErrorBoundary>
     </div>
   );
 };
 
-export default Properties; 
+// Export the component wrapped with an error boundary
+export default withErrorBoundary(Properties, {
+  componentName: 'Properties',
+  errorHandler: (error, errorInfo) => {
+    console.error('Properties page error:', error, errorInfo);
+  }
+});

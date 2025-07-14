@@ -131,10 +131,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   }
 
   const hasRole = (role: string): boolean => {
-    // Security Fix: Only rely on userRoles from RPC function
-    // Don't fallback to profile.role to prevent security gaps
+    // If we're still loading, don't deny access yet
+    if (loading) {
+      return false;
+    }
+
+    // Only rely on userRoles from the user_roles table
     if (!userRoles || userRoles.length === 0) {
-      console.warn('User roles not loaded yet or empty. Denying access.');
+      console.warn('User roles not loaded. Access denied.');
       return false;
     }
     return userRoles.includes(role);

@@ -143,7 +143,7 @@ const MessagesSection = ({ chatRooms = [], loading = false }: MessagesSectionPro
 
       if (error) throw error;
       
-      handleSuccess("Your reply has been sent successfully.", toast, {
+              handleSuccess(toast, "Your reply has been sent successfully.", {
         title: "Message Sent",
       });
       

@@ -19,7 +19,7 @@ const Messages = () => {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
-  const { profile } = useAuth();
+  const { profile, hasRole } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -149,10 +149,10 @@ const Messages = () => {
   };
 
   const handleBackNavigation = () => {
-    if (profile?.role === 'landlord') {
+    if (hasRole('landlord')) {
       navigate('/landlord');
     } else {
-      navigate('/properties');
+      navigate('/renter');
     }
   };
 
@@ -172,7 +172,7 @@ const Messages = () => {
         {/* Breadcrumb Navigation */}
         <div className="mb-6">
           <nav className="flex items-center space-x-2 text-sm text-gray-600">
-            {profile?.role === 'landlord' ? (
+            {hasRole('landlord') ? (
               <>
                 <Link to="/landlord" className="hover:text-blue-600">Dashboard</Link>
                 <span>•</span>
@@ -180,7 +180,7 @@ const Messages = () => {
               </>
             ) : (
               <>
-                <Link to="/properties" className="hover:text-blue-600">Properties</Link>
+                <Link to="/renter" className="hover:text-blue-600">Dashboard</Link>
                 <span>•</span>
                 <span className="text-gray-900 font-medium">Messages</span>
               </>
@@ -194,7 +194,7 @@ const Messages = () => {
             <div>
               <h1 className="text-3xl font-bold text-gray-900 mb-2">Messages</h1>
               <p className="text-gray-600">
-                Manage your conversations with {profile?.role === 'landlord' ? 'renters' : 'landlords'}
+                Manage your conversations with {hasRole('landlord') ? 'renters' : 'landlords'}
               </p>
             </div>
             <div className="flex items-center space-x-3">
@@ -204,9 +204,9 @@ const Messages = () => {
                 className="hidden sm:flex"
               >
                 <ArrowLeft className="w-4 h-4 mr-2" />
-                Back to {profile?.role === 'landlord' ? 'Dashboard' : 'Properties'}
+                Back to {hasRole('landlord') ? 'Dashboard' : 'Dashboard'}
               </Button>
-              {profile?.role === 'landlord' && (
+              {hasRole('landlord') && (
                 <Link to="/landlord/new">
                   <Button>
                     <Building className="w-4 h-4 mr-2" />
@@ -333,7 +333,7 @@ const Messages = () => {
                 </h3>
                 <p className="text-gray-600 mb-4">
                   {chatRooms.length === 0 ? (
-                    profile?.role === 'landlord' 
+                    hasRole('landlord')
                       ? "When renters contact you about your properties, conversations will appear here."
                       : "Start chatting with landlords about properties you're interested in."
                   ) : (
@@ -341,7 +341,7 @@ const Messages = () => {
                   )}
                 </p>
                 <div className="flex gap-3 justify-center">
-                  {profile?.role === 'landlord' ? (
+                  {hasRole('landlord') ? (
                     <>
                       <Link to="/landlord/new">
                         <Button className="bg-blue-600 hover:bg-blue-700">

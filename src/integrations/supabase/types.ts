@@ -6,6 +6,34 @@ export type Json =
   | { [key: string]: Json | undefined }
   | Json[]
 
+export type TransactionType = 'rent_payment' | 'deposit' | 'maintenance_cost' | 'utility_payment' | 'insurance' | 'tax' | 'other_income' | 'other_expense';
+export type PaymentStatus = 'pending' | 'completed' | 'failed' | 'refunded';
+
+export interface PropertyTransaction {
+  id: string;
+  property_id: string;
+  tenant_id?: string;
+  transaction_type: TransactionType;
+  amount: number;
+  status: PaymentStatus;
+  due_date?: string;
+  payment_date?: string;
+  description?: string;
+  recurring: boolean;
+  created_at: string;
+}
+
+export interface PropertyFinancialMetrics {
+  id: string;
+  property_id: string;
+  total_revenue: number;
+  total_expenses: number;
+  net_income: number;
+  occupancy_rate: number;
+  last_updated: string;
+  created_at: string;
+}
+
 export type Database = {
   public: {
     Tables: {
@@ -170,6 +198,7 @@ export type Database = {
           bedrooms: number | null
           created_at: string | null
           description: string
+          house_documents: Json | null
           id: string
           landlord_id: string
           location: string | null
@@ -186,6 +215,7 @@ export type Database = {
           bedrooms?: number | null
           created_at?: string | null
           description: string
+          house_documents?: Json | null
           id?: string
           landlord_id: string
           location?: string | null
@@ -202,6 +232,7 @@ export type Database = {
           bedrooms?: number | null
           created_at?: string | null
           description?: string
+          house_documents?: Json | null
           id?: string
           landlord_id?: string
           location?: string | null
@@ -385,6 +416,16 @@ export type Database = {
             referencedColumns: ["id"]
           }
         ];
+      }
+      property_transactions: {
+        Row: PropertyTransaction;
+        Insert: Omit<PropertyTransaction, 'id' | 'created_at'>;
+        Update: Partial<Omit<PropertyTransaction, 'id' | 'created_at'>>;
+      }
+      property_financial_metrics: {
+        Row: PropertyFinancialMetrics;
+        Insert: Omit<PropertyFinancialMetrics, 'id' | 'created_at' | 'last_updated'>;
+        Update: Partial<Omit<PropertyFinancialMetrics, 'id' | 'created_at' | 'last_updated'>>;
       }
     }
     Views: {

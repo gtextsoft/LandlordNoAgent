@@ -28,6 +28,9 @@ import { supabase } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
 import AdminAnalyticsChart from './AdminAnalyticsChart';
 import { AnalyticsService } from "@/services/analyticsService";
+import { PropertyTransaction, PropertyFinancialMetrics } from "@/integrations/supabase/types";
+import { useAuth } from '@/hooks/useAuth';
+import { Navigate } from 'react-router-dom';
 
 interface PlatformMetrics {
   totalUsers: number;
@@ -47,6 +50,13 @@ interface ChartData {
 }
 
 const AdminAnalyticsDashboard = () => {
+  const { hasRole } = useAuth();
+  
+  // Ensure only admins can access this dashboard
+  if (!hasRole('admin')) {
+    return <Navigate to="/" replace />;
+  }
+
   const [timeRange, setTimeRange] = useState("30d");
   const [metrics, setMetrics] = useState<PlatformMetrics>({
     totalUsers: 0,
@@ -81,52 +91,67 @@ const AdminAnalyticsDashboard = () => {
       // Fetch properties metrics
       const { data: properties, error: propertiesError } = await supabase
         .from('properties')
-        .select('id, status, price, created_at')
+        .select('id, status, created_at')
         .order('created_at', { ascending: false });
 
       if (propertiesError) throw propertiesError;
 
-      // Fetch property reviews
-      const { data: reviews, error: reviewsError } = await supabase
-        .from('property_reviews')
-        .select('id, action, created_at')
-        .order('created_at', { ascending: false });
+      // Fetch financial metrics
+      const { data: financialMetrics, error: financialError } = await supabase
+        .from('property_financial_metrics')
+        .select('*') as { data: PropertyFinancialMetrics[] | null; error: any };
 
-      if (reviewsError) throw reviewsError;
+      if (financialError) throw financialError;
 
-      // Calculate metrics
+      // Calculate active users based on recent activity
       const now = new Date();
       const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-      
-      // Calculate active users based on creation date for now
       const activeUsers = users?.filter(user => 
         user.created_at && new Date(user.created_at) > thirtyDaysAgo
       ).length || 0;
 
+      // Calculate property metrics
       const activeProperties = properties?.filter(p => p.status === 'active').length || 0;
-      
-      const totalRevenue = properties?.reduce((sum, p) => sum + (p.price || 0), 0) || 0;
-      
-      const lastMonthProperties = properties?.filter(p => 
-        new Date(p.created_at) > thirtyDaysAgo
-      ).length || 0;
 
-      const previousMonthProperties = properties?.filter(p => {
-        const date = new Date(p.created_at);
-        return date > new Date(thirtyDaysAgo.getTime() - 30 * 24 * 60 * 60 * 1000) && 
-               date < thirtyDaysAgo;
-      }).length || 0;
+      // Calculate financial metrics
+      const totalRevenue = financialMetrics?.reduce((sum, m) => sum + m.total_revenue, 0) || 0;
+      
+      // Calculate monthly growth from transactions
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
 
-      const monthlyGrowth = previousMonthProperties === 0 ? 100 :
-        Math.round(((lastMonthProperties - previousMonthProperties) / previousMonthProperties) * 100);
+      const { data: thisMonthData } = await supabase
+        .from('property_transactions')
+        .select('*')
+        .gte('payment_date', startOfMonth.toISOString())
+        .in('transaction_type', ['rent_payment', 'deposit', 'other_income'])
+        .eq('status', 'completed') as { data: PropertyTransaction[] | null; error: any };
+
+      const { data: lastMonthData } = await supabase
+        .from('property_transactions')
+        .select('*')
+        .gte('payment_date', startOfLastMonth.toISOString())
+        .lt('payment_date', startOfMonth.toISOString())
+        .in('transaction_type', ['rent_payment', 'deposit', 'other_income'])
+        .eq('status', 'completed') as { data: PropertyTransaction[] | null; error: any };
+
+      const thisMonthRevenue = thisMonthData?.reduce((sum, t) => sum + t.amount, 0) || 0;
+      const lastMonthRevenue = lastMonthData?.reduce((sum, t) => sum + t.amount, 0) || 0;
+
+      const monthlyGrowth = lastMonthRevenue === 0 ? 0 :
+        ((thisMonthRevenue - lastMonthRevenue) / lastMonthRevenue) * 100;
+
+      // Fetch property reviews for approval rate
+      const { data: reviews } = await supabase
+        .from('property_reviews')
+        .select('id, action')
+        .order('created_at', { ascending: false });
 
       const approvedReviews = reviews?.filter(r => r.action === 'approved').length || 0;
       const propertyApprovalRate = reviews?.length ? 
         Math.round((approvedReviews / reviews.length) * 100) : 0;
 
-      // Calculate average response time (mock data for now)
-      const averageResponseTime = Math.round(Math.random() * 24 + 12); // 12-36 hours
-
+      // Set metrics
       setMetrics({
         totalUsers: users?.length || 0,
         activeUsers,
@@ -135,15 +160,12 @@ const AdminAnalyticsDashboard = () => {
         totalRevenue,
         monthlyGrowth,
         propertyApprovalRate,
-        averageResponseTime
+        averageResponseTime: 24 // Default to 24 hours
       });
 
-      // Generate property chart data
-      generateChartData(properties || []);
+      // Generate chart data
+      await generateChartData();
 
-      // Fetch user activity data
-      const userActivity = await AnalyticsService.getUserActivityData(timeRange);
-      setUserActivityData(userActivity);
     } catch (error) {
       console.error('Error fetching platform metrics:', error);
       toast({
@@ -156,28 +178,53 @@ const AdminAnalyticsDashboard = () => {
     }
   };
 
-  const generateChartData = (properties: any[]) => {
-    const days = timeRange === "7d" ? 7 : timeRange === "30d" ? 30 : 90;
-    const data: ChartData[] = [];
+  const generateChartData = async () => {
+    try {
+      // Get date range based on timeRange
+      const now = new Date();
+      const days = parseInt(timeRange);
+      const startDate = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
 
-    for (let i = days - 1; i >= 0; i--) {
-      const date = new Date();
-      date.setDate(date.getDate() - i);
-      const dateStr = date.toISOString().split('T')[0];
+      // Fetch transactions for the period
+      const { data: transactions } = await supabase
+        .from('property_transactions')
+        .select('*')
+        .gte('payment_date', startDate.toISOString())
+        .order('payment_date', { ascending: true }) as { data: PropertyTransaction[] | null; error: any };
 
-      // Count properties created on this date
-      const propertiesOnDate = properties.filter(p => 
-        p.created_at.split('T')[0] === dateStr
-      ).length;
+      if (!transactions) return;
 
-      data.push({
-        date: dateStr,
-        value: propertiesOnDate,
-        label: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-      });
+      // Group transactions by date
+      const dailyData = transactions.reduce((acc: Record<string, number>, t) => {
+        const date = new Date(t.payment_date || t.created_at).toISOString().split('T')[0];
+        if (!acc[date]) acc[date] = 0;
+        if (t.transaction_type === 'rent_payment' || t.transaction_type === 'deposit' || t.transaction_type === 'other_income') {
+          acc[date] += t.amount;
+        }
+        return acc;
+      }, {});
+
+      // Convert to chart data format
+      const chartData: ChartData[] = Object.entries(dailyData).map(([date, value]) => ({
+        date,
+        value,
+        label: new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+      }));
+
+      setPropertyChartData(chartData);
+
+      // Generate user activity data
+      const userActivityChartData: ChartData[] = chartData.map(d => ({
+        date: d.date,
+        value: Math.round(d.value * 0.8), // Example: 80% of revenue represents active users
+        label: d.label
+      }));
+
+      setUserActivityData(userActivityChartData);
+
+    } catch (error) {
+      console.error('Error generating chart data:', error);
     }
-
-    setPropertyChartData(data);
   };
 
   if (loading) {

@@ -337,14 +337,14 @@ const AdminDashboard = () => {
             .from('profiles')
             .update({ updated_at: new Date().toISOString() })
             .eq('id', userId);
-          handleSuccess('User activated successfully', toast);
+          handleSuccess(toast, 'User activated successfully');
           break;
         case 'deactivate':
           await supabase
             .from('profiles')
             .update({ updated_at: new Date().toISOString() })
             .eq('id', userId);
-          handleSuccess('User deactivated successfully', toast);
+          handleSuccess(toast, 'User deactivated successfully');
           break;
         case 'delete':
           const { data: userProperties } = await supabase
@@ -366,7 +366,7 @@ const AdminDashboard = () => {
             .delete()
             .eq('id', userId);
           
-          handleSuccess('User deleted successfully', toast);
+          handleSuccess(toast, 'User deleted successfully');
           break;
       }
       await fetchUsers();
@@ -398,7 +398,7 @@ const AdminDashboard = () => {
             .eq('id', propertyId);
           break;
       }
-      handleSuccess(`Property ${action}d successfully`, toast);
+              handleSuccess(toast, `Property ${action}d successfully`);
       await fetchProperties();
       await fetchStats();
     } catch (error: any) {
@@ -459,7 +459,7 @@ const AdminDashboard = () => {
       link.click();
       document.body.removeChild(link);
       
-      handleSuccess('Data exported successfully', toast);
+        handleSuccess(toast, 'Data exported successfully');
     } catch (error) {
       handleError(error, toast, 'Failed to export data');
     }

@@ -14,10 +14,11 @@ import QuickActions from "@/components/landlord/QuickActions";
 import PropertyManagement from "@/components/landlord/PropertyManagement";
 import MessagesSection from "@/components/landlord/MessagesSection";
 import AnalyticsDashboard from "@/components/landlord/AnalyticsDashboard";
+import RevenueTracking from "@/components/landlord/RevenueTracking";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { BarChart3, Home, MessageCircle, TrendingUp, Calendar } from "lucide-react";
+import { BarChart3, Home, MessageCircle, TrendingUp, Calendar, DollarSign } from "lucide-react";
 import { Link } from "react-router-dom";
 
 interface ChatRoom {
@@ -202,15 +203,13 @@ const LandlordDashboard = () => {
         return;
       }
 
-      // Calculate real views based on inquiries (estimate 8 views per inquiry + base views)
-      const totalInquiries = properties.reduce((sum, property) => 
-        sum + (property.chat_rooms?.length || 0), 0
-      );
-      
-      // More realistic view calculation: base views + inquiry-driven views
-      const baseViews = properties.length * 15; // Base 15 views per property
-      const inquiryViews = totalInquiries * 8; // 8 additional views per inquiry
-      const totalViews = baseViews + inquiryViews;
+      // Get actual view counts from analytics
+      const { data: viewsData } = await supabase
+        .from('property_views')
+        .select('count')
+        .eq('landlord_id', profile.id);
+
+      const totalViews = viewsData?.reduce((sum, view) => sum + (view.count || 0), 0) ?? 0;
       
       setStats(prevStats => ({
         ...prevStats,
@@ -286,77 +285,37 @@ const LandlordDashboard = () => {
 
   return (
     <Layout>
-      <div className="max-w-7xl mx-auto p-4 lg:p-6">
-        {/* Breadcrumb Navigation */}
-        <div className="mb-6">
-          <nav className="flex items-center space-x-2 text-sm text-gray-600">
-            <span className="text-gray-900 font-medium">Dashboard</span>
-          </nav>
-        </div>
+      <div className="container mx-auto p-6 space-y-6">
+        <Tabs defaultValue="overview" value={activeTab} onValueChange={setActiveTab}>
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
+            <TabsList>
+              <TabsTrigger value="overview" className="flex items-center">
+                <BarChart3 className="w-4 h-4 mr-2" />
+                Overview
+              </TabsTrigger>
+              <TabsTrigger value="analytics" className="flex items-center">
+                <TrendingUp className="w-4 h-4 mr-2" />
+                Analytics
+              </TabsTrigger>
+              <TabsTrigger value="properties" className="flex items-center">
+                <Home className="w-4 h-4 mr-2" />
+                Properties
+              </TabsTrigger>
+              <TabsTrigger value="messages" className="flex items-center">
+                <MessageCircle className="w-4 h-4 mr-2" />
+                Messages
+              </TabsTrigger>
+            </TabsList>
+          </div>
 
-        {/* Welcome Section */}
-        <div className="animate-fade-in mb-8">
-          <h2 className="text-3xl font-bold text-gray-900 mb-2">
-            Welcome back, {profile?.full_name || 'Landlord'}!
-          </h2>
-          <p className="text-gray-600">Manage your properties and track your rental business.</p>
-          
-          {/* Debug Panel - only show if no properties */}
-          {properties.length === 0 && (
-            <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-              <h3 className="font-medium text-yellow-800 mb-2">🔧 Debug Mode (No Properties Found)</h3>
-              <p className="text-sm text-yellow-700 mb-3">
-                It looks like you don't have any properties yet. This might be why you're seeing placeholder data.
-              </p>
-              <div className="flex gap-2">
-                <button
-                  onClick={debugDatabase}
-                  className="px-3 py-1 bg-yellow-600 text-white text-sm rounded hover:bg-yellow-700"
-                >
-                  Debug Database
-                </button>
-                <button
-                  onClick={createSampleData}
-                  className="px-3 py-1 bg-green-600 text-white text-sm rounded hover:bg-green-700"
-                >
-                  Create Sample Data
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Navigation Tabs */}
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4 lg:w-auto lg:grid-cols-4">
-            <TabsTrigger value="overview" className="flex items-center gap-2">
-              <Home className="w-4 h-4" />
-              <span className="hidden sm:inline">Overview</span>
-            </TabsTrigger>
-            <TabsTrigger value="analytics" className="flex items-center gap-2">
-              <BarChart3 className="w-4 h-4" />
-              <span className="hidden sm:inline">Analytics</span>
-            </TabsTrigger>
-            <TabsTrigger value="properties" className="flex items-center gap-2">
-              <Home className="w-4 h-4" />
-              <span className="hidden sm:inline">Properties</span>
-            </TabsTrigger>
-            <TabsTrigger value="messages" className="flex items-center gap-2">
-              <MessageCircle className="w-4 h-4" />
-              <span className="hidden sm:inline">Messages</span>
-              {chatRooms.filter(room => (room as any).unread_count > 0).length > 0 && (
-                <Badge variant="destructive" className="ml-1 h-4 w-4 p-0 text-xs">
-                  {chatRooms.reduce((sum, room) => sum + ((room as any).unread_count || 0), 0)}
-                </Badge>
-              )}
-            </TabsTrigger>
-          </TabsList>
-
-          {/* Overview Tab */}
           <TabsContent value="overview" className="space-y-6">
             {/* Stats Cards */}
             <div className="animate-fade-in">
-              <DashboardStats stats={updatedStats} loading={statsLoading} />
+              <DashboardStats 
+                stats={stats} 
+                properties={properties}
+                loading={statsLoading} 
+              />
             </div>
 
             {/* Quick Actions */}
@@ -366,8 +325,7 @@ const LandlordDashboard = () => {
                   totalProperties: stats.totalProperties,
                   activeProperties: stats.activeProperties,
                   totalViews: stats.totalViews,
-                  totalInquiries: stats.totalInquiries,
-                  monthlyRevenue: stats.monthlyRevenue
+                  totalInquiries: stats.totalInquiries
                 }}
               />
             </div>
@@ -447,17 +405,13 @@ const LandlordDashboard = () => {
             </div>
           </TabsContent>
 
-          {/* Analytics Tab */}
           <TabsContent value="analytics" className="space-y-6">
             <AnalyticsDashboard 
               properties={properties}
-              chatRooms={chatRooms}
-              stats={updatedStats}
               loading={statsLoading}
             />
           </TabsContent>
 
-          {/* Properties Tab */}
           <TabsContent value="properties" className="space-y-6">
             <PropertyManagement
               properties={properties}
@@ -468,7 +422,6 @@ const LandlordDashboard = () => {
             />
           </TabsContent>
 
-          {/* Messages Tab */}
           <TabsContent value="messages" className="space-y-6">
             <MessagesSection chatRooms={chatRooms} loading={messagesLoading} />
           </TabsContent>

@@ -25,7 +25,7 @@ const PropertyChat = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
-  const { profile } = useAuth();
+  const { profile, hasRole } = useAuth();
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -66,10 +66,10 @@ const PropertyChat = () => {
           `)
           .eq('property_id', id);
 
-        // Filter based on user role
-        if (profile.role === 'renter') {
+        // Filter based on user role using secure role checking
+        if (hasRole('renter')) {
           chatQuery = chatQuery.eq('renter_id', profile.id);
-        } else if (profile.role === 'landlord') {
+        } else if (hasRole('landlord')) {
           chatQuery = chatQuery.eq('landlord_id', profile.id);
         }
 
@@ -77,7 +77,7 @@ const PropertyChat = () => {
 
         let currentChatRoom = existingChat;
 
-        if (!existingChat && profile.role === 'renter') {
+        if (!existingChat && hasRole('renter')) {
           // Create new chat room if renter is initiating
           const { data: newChat, error: createError } = await supabase
             .from('chat_rooms')
@@ -105,7 +105,7 @@ const PropertyChat = () => {
 
         setChatRoom(currentChatRoom as any);
         // Set other participant info
-        if (profile.role === 'renter') {
+        if (hasRole('renter')) {
           setOtherParticipant((currentChatRoom as any).landlord_profile);
         } else {
           setOtherParticipant((currentChatRoom as any).renter_profile);
@@ -246,7 +246,7 @@ const PropertyChat = () => {
             <h2 className="text-2xl font-bold text-gray-900 mb-2">Chat not found</h2>
             <p className="text-gray-600 mb-4">The chat room you're looking for doesn't exist.</p>
                           <div className="flex gap-3 justify-center">
-                {profile?.role === 'landlord' ? (
+                {hasRole('landlord') ? (
                   <>
                     <Link to="/landlord">
                       <Button>
@@ -290,7 +290,7 @@ const PropertyChat = () => {
         {/* Breadcrumb Navigation */}
         <div className="mb-6">
           <nav className="flex items-center space-x-2 text-sm text-gray-600">
-            {profile?.role === 'landlord' ? (
+            {hasRole('landlord') ? (
               <>
                 <Link to="/landlord" className="hover:text-blue-600">Dashboard</Link>
                 <span>•</span>
@@ -324,8 +324,8 @@ const PropertyChat = () => {
                     </p>
                   </div>
                 </div>
-                <Badge variant={profile?.role === 'landlord' ? 'default' : 'secondary'}>
-                  {profile?.role === 'landlord' ? 'As Landlord' : 'As Renter'}
+                                  <Badge variant={hasRole('landlord') ? 'default' : 'secondary'}>
+                  {hasRole('landlord') ? 'As Landlord' : 'As Renter'}
                 </Badge>
               </div>
               
@@ -378,7 +378,7 @@ const PropertyChat = () => {
                       {profile?.full_name || 'You'}
                     </p>
                     <p className="text-sm text-gray-500">
-                      {profile?.role?.charAt(0).toUpperCase() + profile?.role?.slice(1)}
+                      {hasRole('landlord') ? 'Landlord' : hasRole('admin') ? 'Admin' : 'Renter'}
                     </p>
                   </div>
                 </div>

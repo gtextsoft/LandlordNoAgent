@@ -117,8 +117,8 @@ export const handleError = (
  * Enhanced success handler
  */
 export const handleSuccess = (
-  message: string,
   toastFn: typeof toast,
+  message: string,
   options: {
     title?: string;
     duration?: number;

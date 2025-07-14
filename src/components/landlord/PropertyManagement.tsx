@@ -26,13 +26,24 @@ import {
   EyeOff, 
   Download,
   RefreshCw,
-  GitCompare
+  GitCompare,
+  Wrench,
+  Archive
 } from "lucide-react";
 import { Property } from "@/lib/supabase";
 import PropertyCard from "@/components/PropertyCard";
 import PropertyComparison from "./PropertyComparison";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from '@/lib/supabase';
+import { 
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import PropertyStatusBadge from "@/components/PropertyStatusBadge";
 
 interface PropertyManagementProps {
   properties: Property[];
@@ -40,6 +51,14 @@ interface PropertyManagementProps {
   onDelete: (propertyId: string) => void;
   onUpdate: () => void;
   loading?: boolean;
+}
+
+interface StatusTransition {
+  nextStatus: string;
+  label: string;
+  description: string;
+  icon: any;
+  requiresConfirmation?: boolean;
 }
 
 const PropertyManagement = ({ properties, onToggleStatus, onDelete, onUpdate, loading = false }: PropertyManagementProps) => {
@@ -50,6 +69,9 @@ const PropertyManagement = ({ properties, onToggleStatus, onDelete, onUpdate, lo
   const [bulkActionLoading, setBulkActionLoading] = useState(false);
   const [showComparison, setShowComparison] = useState(false);
   const [applicationsByProperty, setApplicationsByProperty] = useState<Record<string, any[]>>({});
+  const [showStatusDialog, setShowStatusDialog] = useState(false);
+  const [selectedPropertyId, setSelectedPropertyId] = useState<string>("");
+  const [selectedTransition, setSelectedTransition] = useState<StatusTransition | null>(null);
   
   const { toast } = useToast();
 
@@ -227,6 +249,166 @@ const PropertyManagement = ({ properties, onToggleStatus, onDelete, onUpdate, lo
       setApplicationsByProperty(updatedApplicationsByProperty);
     } catch (error: any) {
       toast({ title: 'Error', description: error.message || 'Failed to update application.', variant: 'destructive' });
+    }
+  };
+
+  const getAvailableTransitions = (currentStatus: string): StatusTransition[] => {
+    switch (currentStatus) {
+      case 'pending':
+        return [
+          {
+            nextStatus: 'active',
+            label: 'Activate',
+            description: 'Make the property visible to potential renters',
+            icon: Eye,
+            requiresConfirmation: true
+          },
+          {
+            nextStatus: 'inactive',
+            label: 'Deactivate',
+            description: 'Hide the property from potential renters',
+            icon: EyeOff
+          }
+        ];
+      case 'active':
+        return [
+          {
+            nextStatus: 'rented',
+            label: 'Mark as Rented',
+            description: 'Property has been rented out',
+            icon: Home,
+            requiresConfirmation: true
+          },
+          {
+            nextStatus: 'inactive',
+            label: 'Deactivate',
+            description: 'Hide the property from potential renters',
+            icon: EyeOff
+          },
+          {
+            nextStatus: 'maintenance',
+            label: 'Under Maintenance',
+            description: 'Property needs repairs or maintenance',
+            icon: Wrench
+          },
+          {
+            nextStatus: 'archived',
+            label: 'Archive',
+            description: 'Archive this property listing',
+            icon: Archive,
+            requiresConfirmation: true
+          }
+        ];
+      case 'rented':
+        return [
+          {
+            nextStatus: 'active',
+            label: 'Available Again',
+            description: 'Make the property available for rent',
+            icon: Eye,
+            requiresConfirmation: true
+          },
+          {
+            nextStatus: 'maintenance',
+            label: 'Under Maintenance',
+            description: 'Property needs repairs or maintenance',
+            icon: Wrench
+          },
+          {
+            nextStatus: 'archived',
+            label: 'Archive',
+            description: 'Archive this property listing',
+            icon: Archive,
+            requiresConfirmation: true
+          }
+        ];
+      case 'inactive':
+        return [
+          {
+            nextStatus: 'active',
+            label: 'Activate',
+            description: 'Make the property visible to potential renters',
+            icon: Eye
+          },
+          {
+            nextStatus: 'archived',
+            label: 'Archive',
+            description: 'Archive this property listing',
+            icon: Archive,
+            requiresConfirmation: true
+          }
+        ];
+      case 'maintenance':
+        return [
+          {
+            nextStatus: 'active',
+            label: 'Mark as Available',
+            description: 'Maintenance complete, make property available',
+            icon: Eye
+          },
+          {
+            nextStatus: 'inactive',
+            label: 'Deactivate',
+            description: 'Hide the property from potential renters',
+            icon: EyeOff
+          },
+          {
+            nextStatus: 'archived',
+            label: 'Archive',
+            description: 'Archive this property listing',
+            icon: Archive,
+            requiresConfirmation: true
+          }
+        ];
+      case 'archived':
+        return [
+          {
+            nextStatus: 'active',
+            label: 'Restore',
+            description: 'Restore and make property active',
+            icon: RefreshCw,
+            requiresConfirmation: true
+          }
+        ];
+      default:
+        return [];
+    }
+  };
+
+  const handleStatusChange = async (propertyId: string, transition: StatusTransition) => {
+    if (transition.requiresConfirmation) {
+      setSelectedPropertyId(propertyId);
+      setSelectedTransition(transition);
+      setShowStatusDialog(true);
+    } else {
+      await updatePropertyStatus(propertyId, transition.nextStatus);
+    }
+  };
+
+  const updatePropertyStatus = async (propertyId: string, newStatus: string) => {
+    try {
+      const { error } = await supabase
+        .from('properties')
+        .update({ status: newStatus })
+        .eq('id', propertyId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Status Updated",
+        description: `Property status has been updated to ${newStatus}`,
+      });
+
+      onUpdate?.();
+    } catch (error: any) {
+      console.error('Error updating property status:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update property status",
+        variant: "destructive",
+      });
+    } finally {
+      setShowStatusDialog(false);
     }
   };
 

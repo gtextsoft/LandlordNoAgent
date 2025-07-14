@@ -36,7 +36,7 @@ const ProtectedRoute = ({ children, allowedRoles }: ProtectedRouteProps) => {
       } else if (primaryRole === 'landlord') {
         return <Navigate to="/landlord" replace />
       } else {
-        return <Navigate to="/" replace />
+        return <Navigate to="/renter" replace />
       }
     }
   }

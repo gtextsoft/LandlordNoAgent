@@ -11,11 +11,35 @@ import {
   MessageCircle, 
   Calendar, 
   TrendingUp,
-  Star
+  Star,
+  Archive,
+  Download,
+  Upload,
+  FileText,
+  Settings,
+  RefreshCw,
+  CheckSquare,
+  AlertTriangle,
+  Building,
+  Mail
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/hooks/useAuth";
+import { Property } from "@/lib/supabase";
+import { 
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { toast } from "@/components/ui/use-toast";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 
 interface QuickActionsProps {
   stats?: {
@@ -25,6 +49,8 @@ interface QuickActionsProps {
     totalInquiries: number;
     monthlyRevenue?: number;
   };
+  properties?: Property[];
+  onPropertiesUpdate?: () => void;
 }
 
 interface Activity {
@@ -35,10 +61,23 @@ interface Activity {
   type: 'inquiry' | 'view' | 'message';
 }
 
-const QuickActions = ({ stats }: QuickActionsProps) => {
+interface BulkAction {
+  title: string;
+  description: string;
+  icon: any;
+  action: () => void;
+  requiresConfirmation?: boolean;
+  confirmationMessage?: string;
+}
+
+const QuickActions = ({ stats, properties = [], onPropertiesUpdate }: QuickActionsProps) => {
   const { profile } = useAuth();
   const [recentActivity, setRecentActivity] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedProperties, setSelectedProperties] = useState<string[]>([]);
+  const [showBulkDialog, setShowBulkDialog] = useState(false);
+  const [currentBulkAction, setCurrentBulkAction] = useState<BulkAction | null>(null);
+  const [bulkActionLoading, setBulkActionLoading] = useState(false);
 
   const actions = [
     {
@@ -59,9 +98,17 @@ const QuickActions = ({ stats }: QuickActionsProps) => {
       priority: "medium",
     },
     {
-      title: "Manage Tenants",
-      description: "View and communicate with current tenants",
+      title: "View Applications",
+      description: "Review and manage rental applications",
       icon: Users,
+      href: "/landlord/applications",
+      variant: "outline" as const,
+      priority: "high",
+    },
+    {
+      title: "Messages",
+      description: "View and respond to tenant messages",
+      icon: MessageCircle,
       href: "/messages",
       variant: "outline" as const,
       priority: "medium",
@@ -74,6 +121,114 @@ const QuickActions = ({ stats }: QuickActionsProps) => {
       variant: "outline" as const,
       priority: "medium",
     }
+  ];
+
+  const bulkActions: BulkAction[] = [
+    {
+      title: "Update Status",
+      description: "Change status of selected properties",
+      icon: RefreshCw,
+      action: async () => {
+        if (!selectedProperties.length) return;
+        
+        try {
+          setBulkActionLoading(true);
+          const { error } = await supabase
+            .from('properties')
+            .update({ status: 'active' })
+            .in('id', selectedProperties);
+            
+          if (error) throw error;
+          
+          toast({
+            title: "Status Updated",
+            description: `Successfully updated ${selectedProperties.length} properties`,
+          });
+          
+          onPropertiesUpdate?.();
+        } catch (error) {
+          console.error('Error updating properties:', error);
+          toast({
+            title: "Error",
+            description: "Failed to update properties",
+            variant: "destructive",
+          });
+        } finally {
+          setBulkActionLoading(false);
+          setShowBulkDialog(false);
+        }
+      },
+      requiresConfirmation: true,
+      confirmationMessage: "Are you sure you want to update the status of the selected properties?",
+    },
+    {
+      title: "Export Data",
+      description: "Export selected properties data",
+      icon: Download,
+      action: () => {
+        const selectedData = properties
+          .filter(p => selectedProperties.includes(p.id))
+          .map(p => ({
+            title: p.title,
+            price: p.price,
+            status: p.status,
+            location: p.location,
+            created_at: p.created_at,
+          }));
+          
+        const csv = convertToCSV(selectedData);
+        downloadCSV(csv, 'property-export.csv');
+      },
+    },
+    {
+      title: "Archive Properties",
+      description: "Archive selected properties",
+      icon: Archive,
+      action: async () => {
+        if (!selectedProperties.length) return;
+        
+        try {
+          setBulkActionLoading(true);
+          const { error } = await supabase
+            .from('properties')
+            .update({ status: 'archived' })
+            .in('id', selectedProperties);
+            
+          if (error) throw error;
+          
+          toast({
+            title: "Properties Archived",
+            description: `Successfully archived ${selectedProperties.length} properties`,
+          });
+          
+          onPropertiesUpdate?.();
+        } catch (error) {
+          console.error('Error archiving properties:', error);
+          toast({
+            title: "Error",
+            description: "Failed to archive properties",
+            variant: "destructive",
+          });
+        } finally {
+          setBulkActionLoading(false);
+          setShowBulkDialog(false);
+        }
+      },
+      requiresConfirmation: true,
+      confirmationMessage: "Are you sure you want to archive the selected properties?",
+    },
+    {
+      title: "Send Bulk Message",
+      description: "Send message to all tenants",
+      icon: Mail,
+      action: async () => {
+        // Implementation for bulk messaging
+        toast({
+          title: "Coming Soon",
+          description: "Bulk messaging feature will be available soon!",
+        });
+      },
+    },
   ];
 
   // Load real recent activity from database
@@ -187,193 +342,176 @@ const QuickActions = ({ stats }: QuickActionsProps) => {
     }
   };
 
-  // Calculate dynamic monthly goal based on current portfolio
-  const currentRevenue = stats?.monthlyRevenue || 0;
-  const dynamicGoal = Math.max(
-    currentRevenue * 1.2, // 20% growth target
-    50000 // Minimum goal of ₦50,000
-  );
-  const goalProgress = Math.min((currentRevenue / dynamicGoal) * 100, 100);
+  const handleBulkAction = (action: BulkAction) => {
+    if (action.requiresConfirmation) {
+      setCurrentBulkAction(action);
+      setShowBulkDialog(true);
+    } else {
+      action.action();
+    }
+  };
+
+  const convertToCSV = (data: any[]) => {
+    const headers = Object.keys(data[0]).join(',');
+    const rows = data.map(obj => Object.values(obj).join(','));
+    return [headers, ...rows].join('\n');
+  };
+
+  const downloadCSV = (csv: string, filename: string) => {
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      {/* Quick Actions */}
-      <Card className="lg:col-span-2">
+    <div className="space-y-6">
+      {/* Quick Actions Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+        {actions.map((action, index) => (
+          <Link key={index} to={action.href}>
+            <Card className={`hover:shadow-lg transition-shadow ${action.className || ''}`}>
+              <CardContent className="p-4">
+                <div className="flex items-center space-x-4">
+                  <action.icon className="w-6 h-6" />
+                  <div>
+                    <h3 className="font-semibold">{action.title}</h3>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">{action.description}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
+        ))}
+      </div>
+
+      {/* Bulk Actions */}
+      <Card>
         <CardHeader>
-          <CardTitle className="flex items-center">
-            <BarChart3 className="w-5 h-5 mr-2" />
-            Quick Actions
+          <CardTitle className="flex items-center justify-between">
+            <span>Bulk Actions</span>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm">
+                  <Settings className="w-4 h-4 mr-2" />
+                  Actions
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent>
+                <DropdownMenuLabel>Select Action</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {bulkActions.map((action, index) => (
+                  <DropdownMenuItem
+                    key={index}
+                    onClick={() => handleBulkAction(action)}
+                    disabled={selectedProperties.length === 0}
+                  >
+                    <action.icon className="w-4 h-4 mr-2" />
+                    {action.title}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {actions.map((action) => (
-              <Link 
-                key={action.title} 
-                to={action.href} 
-                className={action.href.startsWith('#') ? "pointer-events-none" : ""}
-              >
-                <Button
-                  variant={action.variant}
-                  className={`w-full h-auto p-6 flex flex-col items-center space-y-3 transition-all duration-200 hover:scale-105 ${
-                    action.className || ""
-                  } ${action.href.startsWith('#') ? "opacity-50" : ""}`}
-                  disabled={action.href.startsWith('#')}
-                >
-                  <div className="flex items-center space-x-2">
-                    <action.icon className="w-6 h-6" />
-                    {action.priority === "high" && (
-                      <Badge variant="secondary" className="text-xs">
-                        Recommended
-                      </Badge>
-                    )}
-                  </div>
-                  <div className="text-center">
-                    <div className="font-medium text-base">{action.title}</div>
-                    <div className="text-sm opacity-80 mt-1">{action.description}</div>
-                  </div>
-                  {action.href.startsWith('#') && (
-                    <Badge variant="outline" className="text-xs">
-                      Available in Tab Above
-                    </Badge>
-                  )}
-                </Button>
-              </Link>
+          <div className="space-y-4">
+            {properties.map((property) => (
+              <div key={property.id} className="flex items-center space-x-4">
+                <Checkbox
+                  checked={selectedProperties.includes(property.id)}
+                  onCheckedChange={(checked) => {
+                    setSelectedProperties(prev =>
+                      checked
+                        ? [...prev, property.id]
+                        : prev.filter(id => id !== property.id)
+                    );
+                  }}
+                />
+                <div className="flex-1">
+                  <h4 className="font-medium">{property.title}</h4>
+                  <p className="text-sm text-gray-500">{property.location}</p>
+                </div>
+                <Badge>{property.status}</Badge>
+              </div>
             ))}
           </div>
         </CardContent>
       </Card>
 
-      {/* Performance & Activity */}
-      <div className="space-y-6">
-        {/* Monthly Goal Progress */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-lg flex items-center">
-              <TrendingUp className="w-5 h-5 mr-2 text-green-500" />
-              Monthly Goal
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-600">Revenue Progress</span>
-                <span className="text-sm font-medium">
-                  ₦{currentRevenue.toLocaleString()} / ₦{dynamicGoal.toLocaleString()}
-                </span>
-              </div>
-              <Progress value={goalProgress} className="h-2" />
-              <div className="flex justify-between items-center text-xs text-gray-500">
-                <span>{Math.round(goalProgress)}% completed</span>
-                <span>
-                  {goalProgress >= 100 ? "🎉 Goal achieved!" : `₦${(dynamicGoal - currentRevenue).toLocaleString()} to go`}
-                </span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Recent Activity */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-lg flex items-center">
-              <Calendar className="w-5 h-5 mr-2" />
-              Recent Activity
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {loading ? (
-                <div className="space-y-3">
-                  {[1, 2, 3].map((i) => (
-                    <div key={i} className="animate-pulse">
-                      <div className="flex items-start space-x-3 p-2">
-                        <div className="w-4 h-4 bg-gray-200 rounded"></div>
-                        <div className="flex-1 space-y-1">
-                          <div className="h-4 bg-gray-200 rounded w-3/4"></div>
-                          <div className="h-3 bg-gray-200 rounded w-1/2"></div>
-                          <div className="h-3 bg-gray-200 rounded w-1/4"></div>
-                        </div>
-                      </div>
+      {/* Recent Activity */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Recent Activity</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {loading ? (
+              <div className="animate-pulse space-y-3">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="flex items-center space-x-4">
+                    <div className="w-8 h-8 bg-gray-200 rounded-full" />
+                    <div className="flex-1 space-y-2">
+                      <div className="h-4 bg-gray-200 rounded w-3/4" />
+                      <div className="h-3 bg-gray-200 rounded w-1/2" />
                     </div>
-                  ))}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              recentActivity.map((activity) => (
+                <div key={activity.id} className="flex items-center space-x-4">
+                  {getActivityIcon(activity.type)}
+                  <div className="flex-1">
+                    <p className="text-sm font-medium">{activity.action}</p>
+                    <p className="text-xs text-gray-500">
+                      {activity.property} • {activity.time}
+                    </p>
+                  </div>
                 </div>
-              ) : recentActivity.length > 0 ? (
+              ))
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Confirmation Dialog */}
+      <Dialog open={showBulkDialog} onOpenChange={setShowBulkDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{currentBulkAction?.title}</DialogTitle>
+            <DialogDescription>
+              {currentBulkAction?.confirmationMessage}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowBulkDialog(false)}
+              disabled={bulkActionLoading}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => currentBulkAction?.action()}
+              disabled={bulkActionLoading}
+            >
+              {bulkActionLoading ? (
                 <>
-                  {recentActivity.map((activity) => (
-                    <div key={activity.id} className="flex items-start space-x-3 p-2 rounded-lg hover:bg-gray-50 transition-colors">
-                      <div className="flex-shrink-0 mt-0.5">
-                        {getActivityIcon(activity.type)}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-900">
-                          {activity.action}
-                        </p>
-                        <p className="text-sm text-gray-600 truncate">
-                          {activity.property}
-                        </p>
-                        <p className="text-xs text-gray-400">
-                          {activity.time}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                  
-                  <Link to="/messages" className="block">
-                    <Button variant="ghost" size="sm" className="w-full text-xs">
-                      View All Messages
-                    </Button>
-                  </Link>
+                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                  Processing...
                 </>
               ) : (
-                <div className="text-center py-4 text-gray-500">
-                  <Calendar className="w-8 h-8 mx-auto mb-2 text-gray-300" />
-                  <p className="text-sm">No recent activity</p>
-                  <p className="text-xs mt-1">Activity will appear when renters interact with your properties</p>
-                </div>
+                'Confirm'
               )}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Quick Stats */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-lg flex items-center">
-              <Star className="w-5 h-5 mr-2 text-yellow-500" />
-              Quick Stats
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="text-center">
-                <div className="text-2xl font-bold text-blue-600">
-                  {stats?.totalProperties || 0}
-                </div>
-                <div className="text-xs text-gray-600">Properties</div>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-green-600">
-                  {stats?.totalViews || 0}
-                </div>
-                <div className="text-xs text-gray-600">Total Views</div>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-purple-600">
-                  {stats?.totalInquiries || 0}
-                </div>
-                <div className="text-xs text-gray-600">Inquiries</div>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-orange-600">
-                  {stats?.activeProperties || 0}
-                </div>
-                <div className="text-xs text-gray-600">Active</div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

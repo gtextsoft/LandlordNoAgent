@@ -125,7 +125,7 @@ const UserManagement = () => {
             .eq('id', userId);
 
           if (updateError) throw updateError;
-          handleSuccess(`User ${action}d successfully`, toast);
+          handleSuccess(toast, `User ${action}d successfully`);
           break;
 
         case 'delete':
@@ -135,7 +135,7 @@ const UserManagement = () => {
             .eq('id', userId);
 
           if (deleteError) throw deleteError;
-          handleSuccess('User deleted successfully', toast);
+          handleSuccess(toast, 'User deleted successfully');
           break;
       }
 
@@ -162,12 +162,12 @@ const UserManagement = () => {
           role: newRole,
           created_at: new Date().toISOString()
         }, {
-          onConflict: 'user_id'
+          onConflict: 'user_id,role'
         });
 
       if (roleError) throw roleError;
 
-      handleSuccess('User role updated successfully', toast);
+              handleSuccess(toast, 'User role updated successfully');
       fetchUsers();
     } catch (error: any) {
       handleError(error, toast);

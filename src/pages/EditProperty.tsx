@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -19,9 +19,9 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Home, X, CheckCircle, AlertCircle } from "lucide-react";
+import { ArrowLeft, Home, X, CheckCircle, AlertCircle, Save } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
-import { supabase, HouseDocument } from "@/lib/supabase";
+import { supabase, Property, HouseDocument } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
 import { useLoadingState } from "@/hooks/useLoadingState";
 import { handleError, handleSuccess } from "@/utils/errorHandling";
@@ -30,7 +30,7 @@ import HouseDocumentUpload from "@/components/HouseDocumentUpload";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import Layout from "@/components/Layout";
 import { Link } from "react-router-dom";
-import { Json } from '@/integrations/supabase/types';
+import { Json } from "@/integrations/supabase/types";
 
 const propertySchema = z.object({
   title: z.string()
@@ -53,26 +53,29 @@ const propertySchema = z.object({
     .min(0, "Bathrooms cannot be negative")
     .max(20, "Bathrooms must be less than 20")
     .optional(),
-  status: z.enum(['active', 'pending']),
+  status: z.enum(['active', 'inactive', 'pending', 'rented']),
 });
 
 type PropertyFormData = z.infer<typeof propertySchema>;
 
-const NewListing = () => {
+const EditProperty = () => {
+  const { id } = useParams<{ id: string }>();
+  const [property, setProperty] = useState<Property | null>(null);
   const [imageUrls, setImageUrls] = useState<string[]>([]);
   const [houseDocuments, setHouseDocuments] = useState<HouseDocument[]>([]);
   const [amenities, setAmenities] = useState<string[]>([]);
   const [newAmenity, setNewAmenity] = useState('');
   const [formProgress, setFormProgress] = useState(0);
+  const [initialLoading, setInitialLoading] = useState(true);
   
   const { loading, withLoading } = useLoadingState();
-  const { user } = useAuth();
+  const { user, profile, hasRole } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
 
   const form = useForm<PropertyFormData>({
     resolver: zodResolver(propertySchema),
-    mode: "onChange", // Enable real-time validation
+    mode: "onChange",
     defaultValues: {
       title: "",
       description: "",
@@ -87,6 +90,108 @@ const NewListing = () => {
   // Watch form values for progress calculation
   const watchedValues = form.watch();
 
+  // Helper function to convert Json to HouseDocument[]
+  const parseHouseDocuments = (docs: Json | null): HouseDocument[] => {
+    if (!docs) return [];
+    try {
+      const parsedDocs = Array.isArray(docs) ? docs : [];
+      return parsedDocs.map(doc => ({
+        id: String((doc as any)?.id || ''),
+        name: String((doc as any)?.name || ''),
+        url: String((doc as any)?.url || ''),
+        type: String((doc as any)?.type || ''),
+        size: Number((doc as any)?.size || 0),
+        uploadDate: String((doc as any)?.uploadDate || '')
+      }));
+    } catch (error) {
+      console.error('Error parsing house documents:', error);
+      return [];
+    }
+  };
+
+  // Helper function to convert HouseDocument[] to Json
+  const serializeHouseDocuments = (docs: HouseDocument[]): Json => {
+    return docs.map(doc => ({
+      id: doc.id,
+      name: doc.name,
+      url: doc.url,
+      type: doc.type,
+      size: doc.size,
+      uploadDate: doc.uploadDate
+    })) as Json;
+  };
+
+  // Fetch property data on component mount
+  useEffect(() => {
+    const fetchProperty = async () => {
+      if (!id || !profile) return;
+
+      try {
+        setInitialLoading(true);
+
+        if (!hasRole('landlord')) {
+          navigate('/');
+          return;
+        }
+
+        const { data: propertyData, error } = await supabase
+          .from('properties')
+          .select('*')
+          .eq('id', id)
+          .eq('landlord_id', profile.id)
+          .single();
+
+        if (error) throw error;
+
+        if (!propertyData) {
+          throw new Error('Property not found or you do not have permission to edit it');
+        }
+
+        // Convert house_documents from Json to HouseDocument[]
+        const parsedDocs = parseHouseDocuments(propertyData.house_documents);
+        const propertyWithParsedDocs: Property = {
+          ...propertyData,
+          house_documents: parsedDocs
+        };
+
+        setProperty(propertyWithParsedDocs);
+        setHouseDocuments(parsedDocs);
+
+        // Populate form with existing data
+        form.reset({
+          title: propertyData.title || "",
+          description: propertyData.description || "",
+          price: propertyData.price || 0,
+          location: propertyData.location || "",
+          bedrooms: propertyData.bedrooms || undefined,
+          bathrooms: propertyData.bathrooms || undefined,
+          status: propertyData.status as any || 'pending',
+        });
+
+        // Set existing images
+        if (propertyData.photo_urls && Array.isArray(propertyData.photo_urls)) {
+          setImageUrls(propertyData.photo_urls);
+        } else if (propertyData.photo_url) {
+          setImageUrls([propertyData.photo_url]);
+        }
+
+        // Set existing amenities
+        if (propertyData.amenities && Array.isArray(propertyData.amenities)) {
+          setAmenities(propertyData.amenities);
+        }
+
+      } catch (error: any) {
+        console.error('Error fetching property:', error);
+        handleError(error, toast, 'Failed to load property data');
+        navigate('/landlord');
+      } finally {
+        setInitialLoading(false);
+      }
+    };
+
+    fetchProperty();
+  }, [id, profile, hasRole, navigate, form, toast]);
+
   // Calculate form completion progress
   useEffect(() => {
     const requiredFields = ['title', 'description', 'price', 'location'];
@@ -99,12 +204,10 @@ const NewListing = () => {
     requiredFields.forEach(field => {
       const value = watchedValues[field as keyof PropertyFormData];
       if (field === 'price') {
-        // For price, check if it's a positive number
         if (value && Number(value) > 0) {
           completedRequired++;
         }
       } else {
-        // For other fields, check if they have non-empty values
         if (value && String(value).trim() !== "") {
           completedRequired++;
         }
@@ -119,7 +222,7 @@ const NewListing = () => {
       }
     });
     
-    // Calculate progress (required fields worth 60%, optional 15%, images 15%, documents 10%)
+    // Calculate progress
     const requiredProgress = (completedRequired / requiredFields.length) * 60;
     const optionalProgress = (completedOptional / optionalFields.length) * 15;
     const imageProgress = imageUrls.length > 0 ? 15 : 0;
@@ -139,60 +242,32 @@ const NewListing = () => {
     setAmenities(amenities.filter(a => a !== amenity));
   };
 
-  // Helper function to convert HouseDocument[] to Json
-  const serializeHouseDocuments = (docs: HouseDocument[]): Json => {
-    return docs.map(doc => ({
-      id: doc.id,
-      name: doc.name,
-      url: doc.url,
-      type: doc.type,
-      size: doc.size,
-      uploadDate: doc.uploadDate
-    })) as Json;
-  };
-
   const onSubmit = async (data: PropertyFormData) => {
-    if (!user) {
-      handleError(new Error("Authentication required"), toast, "Please log in to create a listing");
-      return;
-    }
+    if (!id || !profile) return;
 
-    if (imageUrls.length === 0) {
-      toast({
-        title: "Images Required",
-        description: "Please upload at least one image of your property.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    await withLoading(async () => {
-      const propertyData = {
-        title: data.title,
-        description: data.description,
-        price: data.price,
-        location: data.location,
-        bedrooms: data.bedrooms || null,
-        bathrooms: data.bathrooms || null,
-        status: data.status || 'pending',
-        photo_url: imageUrls[0] || null,
-        photo_urls: imageUrls.length > 0 ? imageUrls : null,
-        amenities: amenities.length > 0 ? amenities : null,
-        house_documents: houseDocuments.length > 0 ? serializeHouseDocuments(houseDocuments) : null,
-        landlord_id: user.id,
+    try {
+      const updateData = {
+        ...data,
+        photo_urls: imageUrls,
+        amenities,
+        house_documents: serializeHouseDocuments(houseDocuments),
+        updated_at: new Date().toISOString()
       };
 
-      const { data: property, error } = await supabase
+      const { error } = await supabase
         .from('properties')
-        .insert(propertyData)
-        .select()
-        .single();
+        .update(updateData)
+        .eq('id', id)
+        .eq('landlord_id', profile.id);
 
       if (error) throw error;
 
-      handleSuccess(toast, "Property listing created successfully!");
-      navigate("/landlord");
-    });
+      handleSuccess(toast, 'Property updated successfully');
+      navigate('/landlord');
+    } catch (error: any) {
+      console.error('Error updating property:', error);
+      handleError(error, toast, 'Failed to update property');
+    }
   };
 
   const getFieldValidationState = (fieldName: keyof PropertyFormData) => {
@@ -209,6 +284,35 @@ const NewListing = () => {
     return null;
   };
 
+  if (initialLoading) {
+    return (
+      <Layout>
+        <div className="flex items-center justify-center min-h-[400px]">
+          <LoadingSpinner size="lg" />
+        </div>
+      </Layout>
+    );
+  }
+
+  if (!property) {
+    return (
+      <Layout>
+        <div className="max-w-7xl mx-auto p-4 lg:p-6">
+          <div className="text-center py-12">
+            <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Property Not Found</h2>
+            <p className="text-gray-600 mb-6">
+              The property you're trying to edit doesn't exist or you don't have permission to edit it.
+            </p>
+            <Link to="/landlord">
+              <Button>Back to Dashboard</Button>
+            </Link>
+          </div>
+        </div>
+      </Layout>
+    );
+  }
+
   return (
     <Layout>
       <div className="max-w-7xl mx-auto p-4 lg:p-6">
@@ -217,7 +321,9 @@ const NewListing = () => {
           <nav className="flex items-center space-x-2 text-sm text-gray-600">
             <Link to="/landlord" className="hover:text-blue-600">Dashboard</Link>
             <span>•</span>
-            <span className="text-gray-900 font-medium">New Listing</span>
+            <Link to="/landlord/properties" className="hover:text-blue-600">Properties</Link>
+            <span>•</span>
+            <span className="text-gray-900 font-medium">Edit Property</span>
           </nav>
         </div>
 
@@ -225,12 +331,12 @@ const NewListing = () => {
         <div className="mb-8">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3">
-              <div className="p-2 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-lg">
-                <Home className="w-6 h-6 text-white" />
+              <div className="p-2 bg-gradient-to-r from-green-600 to-emerald-600 rounded-lg">
+                <Save className="w-6 h-6 text-white" />
               </div>
               <div>
-                <h1 className="text-3xl font-bold text-gray-900">Create New Listing</h1>
-                <p className="text-gray-600">Add a new property to your portfolio</p>
+                <h1 className="text-3xl font-bold text-gray-900">Edit Property</h1>
+                <p className="text-gray-600">Update your property information</p>
               </div>
             </div>
             <div className="hidden md:block">
@@ -429,7 +535,7 @@ const NewListing = () => {
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Status</FormLabel>
-                          <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <Select onValueChange={field.onChange} value={field.value}>
                             <FormControl>
                               <SelectTrigger>
                                 <SelectValue />
@@ -438,6 +544,8 @@ const NewListing = () => {
                             <SelectContent>
                               <SelectItem value="pending">Pending Review</SelectItem>
                               <SelectItem value="active">Active</SelectItem>
+                              <SelectItem value="inactive">Inactive</SelectItem>
+                              <SelectItem value="rented">Rented</SelectItem>
                             </SelectContent>
                           </Select>
                           <FormMessage />
@@ -515,6 +623,7 @@ const NewListing = () => {
                   currentDocuments={houseDocuments}
                   maxDocuments={5}
                   landlordId={user.id}
+                  propertyId={property.id}
                 />
               )}
 
@@ -523,9 +632,9 @@ const NewListing = () => {
                 <Button 
                   type="submit" 
                   disabled={loading} 
-                  className="flex-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
+                  className="flex-1 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700"
                 >
-                  {loading ? "Creating..." : "Create Listing"}
+                  {loading ? "Saving..." : "Save Changes"}
                 </Button>
                 <Button 
                   type="button" 
@@ -540,7 +649,7 @@ const NewListing = () => {
               
               {formProgress < 50 && (
                 <div className="text-center text-sm text-blue-600 bg-blue-50 p-3 rounded-lg">
-                  Fill in the required fields to create your listing
+                  Complete the required fields to save your changes
                 </div>
               )}
             </form>
@@ -551,4 +660,4 @@ const NewListing = () => {
   );
 };
 
-export default NewListing;
+export default EditProperty; 

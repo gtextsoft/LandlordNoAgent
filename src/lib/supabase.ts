@@ -1,4 +1,6 @@
 import { supabase as client } from '@/integrations/supabase/client';
+import { Database } from '@/integrations/supabase/types';
+import { PropertyFinancialMetrics, PropertyTransaction } from '@/integrations/supabase/types';
 
 export const supabase = client;
 
@@ -14,23 +16,24 @@ export interface Profile {
   avatar_url?: string;
 }
 
-export interface Property {
+export interface HouseDocument {
   id: string;
-  title: string;
-  description: string;
-  price: number;
-  location?: string;
-  photo_url?: string;
-  photo_urls?: string[];
-  status: string;
-  landlord_id: string;
-  bedrooms?: number;
-  bathrooms?: number;
-  amenities?: string[];
-  created_at: string;
-  updated_at: string;
-  profiles?: Profile;
+  name: string;
+  url: string;
+  path: string; // Storage path for managing the file
+  type: string;
+  size: number;
+  uploadDate: string;
 }
+
+export type Property = Database['public']['Tables']['properties']['Row'] & {
+  average_rating?: number;
+  square_feet?: number;
+  chat_rooms?: any[];
+  property_financial_metrics?: PropertyFinancialMetrics[];
+  property_transactions?: PropertyTransaction[];
+  profiles?: Profile; // Add the profiles field for the landlord profile
+};
 
 export interface ChatRoom {
   id: string;

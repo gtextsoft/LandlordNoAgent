@@ -18,7 +18,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { useAuth } from "@/hooks/useAuth";
-import { Building, Home, MessageSquare, LogOut, User, Shield, Heart, Menu, X, Plus, Bell, Palette, Moon, Sun, MessageCircle, CheckCircle, AlertCircle, DollarSign, Wrench, Calendar } from "lucide-react";
+import { Building, Home, MessageSquare, LogOut, User, Shield, Heart, Menu, X, Plus, Bell, Palette, Moon, Sun, MessageCircle, CheckCircle, AlertCircle, DollarSign, Wrench, Calendar, FileText } from "lucide-react";
 import { useState, useEffect } from "react";
 import { NotificationService, Notification as DBNotification } from "@/services/notificationService";
 import { useToast } from "@/hooks/use-toast";
@@ -26,6 +26,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import EnhancedNavigation from "@/components/EnhancedNavigation";
 import UserOnboarding from "@/components/UserOnboarding";
 import MobileNavigation from "@/components/MobileNavigation";
+import { NotificationsCenter } from './NotificationsCenter';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -352,8 +353,10 @@ const Layout = ({ children, showNav = true }: LayoutProps) => {
         logoColor: "from-green-600 to-blue-600",
         textColor: "text-gray-900",
         links: [
+          { to: "/renter", icon: Home, label: "Dashboard", active: isActive('/renter') },
           { to: "/properties", icon: Home, label: "Browse Properties", active: isActive('/properties') },
           { to: "/saved-properties", icon: Heart, label: "Saved Properties", active: isActive('/saved-properties') },
+          { to: "/my-applications", icon: FileText, label: "My Applications", active: isActive('/my-applications') },
           { to: "/messages", icon: MessageSquare, label: "Messages", active: isActive('/messages') },
         ]
       };
@@ -622,17 +625,20 @@ const Layout = ({ children, showNav = true }: LayoutProps) => {
             )}
           </nav>
           <div className="px-6 py-4 border-t flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <div className={`w-8 h-8 ${hasRole('admin') ? 'bg-red-100' : 'bg-blue-100'} rounded-full flex items-center justify-center`}>
-                <User className={`w-4 h-4 ${hasRole('admin') ? 'text-red-600' : 'text-blue-600'}`} />
-              </div>
-              <div>
-                <span className={`text-sm font-medium ${sidebarConfig.textColor}`}>
-                  {profile.full_name}
-                </span>
-                <p className={`text-xs ${hasRole('admin') ? 'text-red-300' : 'text-gray-500'}`}>
-                  {primaryRole}
-                </p>
+            <div className="flex items-center gap-4">
+              <NotificationsCenter />
+              <div className="flex items-center space-x-2">
+                <div className={`w-8 h-8 ${hasRole('admin') ? 'bg-red-100' : 'bg-blue-100'} rounded-full flex items-center justify-center`}>
+                  <User className={`w-4 h-4 ${hasRole('admin') ? 'text-red-600' : 'text-blue-600'}`} />
+                </div>
+                <div>
+                  <span className={`text-sm font-medium ${sidebarConfig.textColor}`}>
+                    {profile.full_name}
+                  </span>
+                  <p className={`text-xs ${hasRole('admin') ? 'text-red-300' : 'text-gray-500'}`}>
+                    {primaryRole}
+                  </p>
+                </div>
               </div>
             </div>
             

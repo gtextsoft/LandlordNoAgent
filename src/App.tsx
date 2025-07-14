@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useParams } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import ErrorBoundary from "@/components/ErrorBoundary";
@@ -24,6 +24,14 @@ import Messages from "./pages/Messages";
 import LandlordProperties from "./pages/LandlordProperties";
 import LandlordPropertyDetail from './pages/LandlordPropertyDetail';
 import RenterPropertyDetail from './pages/RenterPropertyDetail';
+import EditProperty from './pages/EditProperty';
+import ApplicationManagement from './pages/ApplicationManagement';
+import PaymentSuccess from '@/pages/PaymentSuccess';
+import DemoPaymentGateway from '@/components/DemoPaymentGateway';
+import { useEffect, useState } from "react";
+import { supabase } from "@/lib/supabase";
+import RenterDashboard from './pages/RenterDashboard';
+import MyApplications from './pages/MyApplications';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -33,6 +41,81 @@ const queryClient = new QueryClient({
     },
   },
 });
+
+function PaymentGatewayWrapper() {
+  const { applicationId } = useParams();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [paymentDetails, setPaymentDetails] = useState<{
+    propertyId: string;
+    amount: number;
+  } | null>(null);
+
+  useEffect(() => {
+    const fetchPaymentDetails = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('rental_applications')
+          .select(`
+            id,
+            property_id,
+            rent_amount,
+            status
+          `)
+          .eq('id', applicationId)
+          .single();
+
+        if (error) throw error;
+        if (!data) throw new Error('Application not found');
+
+        // Check if application is approved
+        if (data.status !== 'application_approved') {
+          throw new Error('Application must be approved before payment');
+        }
+
+        setPaymentDetails({
+          propertyId: data.property_id,
+          amount: data.rent_amount
+        });
+      } catch (err: any) {
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (applicationId) {
+      fetchPaymentDetails();
+    }
+  }, [applicationId]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
+        <div className="text-center">
+          <LoadingSpinner />
+          <p className="mt-4 text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !paymentDetails) {
+    return (
+      <div className="p-4 text-center">
+        <p className="text-red-500">Error: {error || 'Failed to load payment details'}</p>
+      </div>
+    );
+  }
+
+  return (
+    <DemoPaymentGateway
+      applicationId={applicationId!}
+      propertyId={paymentDetails.propertyId}
+      amount={paymentDetails.amount}
+    />
+  );
+}
 
 function AppContent() {
   const { user, loading, hasRole } = useAuth();
@@ -62,11 +145,27 @@ function AppContent() {
             <Navigate to="/admin" replace /> :
             hasRole('landlord') ? 
             <Navigate to="/landlord" replace /> : 
-            <Navigate to="/properties" replace />
+            <Navigate to="/renter" replace />
           ) : (
             <Navigate to="/landing" replace />
           )
         } />
+        <Route
+          path="/renter"
+          element={
+            <ProtectedRoute>
+              <RenterDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/my-applications"
+          element={
+            <ProtectedRoute>
+              <MyApplications />
+            </ProtectedRoute>
+          }
+        />
         <Route
           path="/saved-properties"
           element={
@@ -80,6 +179,22 @@ function AppContent() {
           element={
             <ProtectedRoute>
               <Messages />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/payment/:applicationId"
+          element={
+            <ProtectedRoute>
+              <PaymentGatewayWrapper />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/payment-success/:applicationId"
+          element={
+            <ProtectedRoute>
+              <PaymentSuccess />
             </ProtectedRoute>
           }
         />
@@ -105,6 +220,22 @@ function AppContent() {
           element={
             <ProtectedRoute allowedRoles={["landlord"]}>
               <NewListing />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/landlord/edit/:id"
+          element={
+            <ProtectedRoute allowedRoles={["landlord"]}>
+              <EditProperty />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/landlord/applications"
+          element={
+            <ProtectedRoute allowedRoles={["landlord"]}>
+              <ApplicationManagement />
             </ProtectedRoute>
           }
         />

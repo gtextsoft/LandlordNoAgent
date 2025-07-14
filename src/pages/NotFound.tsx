@@ -21,7 +21,7 @@ const NotFound = () => {
     
     if (hasRole('admin')) return "/admin";
     if (hasRole('landlord')) return "/landlord";
-    return "/properties"; // Default for renters or other roles
+    return "/renter"; // Updated for new renter dashboard
   };
 
   const getHomeLabel = () => {
