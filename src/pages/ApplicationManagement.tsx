@@ -78,6 +78,9 @@ const ApplicationManagement = () => {
   const [actionLoading, setActionLoading] = useState(false);
   const [rejectionReason, setRejectionReason] = useState('');
   const [showRejectModal, setShowRejectModal] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const pageSize = 10;
   
   const { profile, hasRole } = useAuth();
   const { toast } = useToast();
@@ -89,8 +92,9 @@ const ApplicationManagement = () => {
       navigate('/');
       return;
     }
-    fetchData();
-  }, [profile, hasRole, navigate]);
+    fetchData(currentPage);
+    // eslint-disable-next-line
+  }, [profile, hasRole, navigate, currentPage]);
 
   useEffect(() => {
     // Set initial filter from URL params
@@ -100,39 +104,49 @@ const ApplicationManagement = () => {
     }
   }, [searchParams]);
 
-  const fetchData = async () => {
-    if (!profile) return;
+  useEffect(() => {
+    setCurrentPage(1);
+    fetchData(1);
+    // eslint-disable-next-line
+  }, [filterStatus, filterProperty, searchQuery]);
 
+  const fetchData = async (page = 1) => {
+    if (!profile) return;
     try {
       setLoading(true);
-      
       // Fetch properties
       const { data: propertiesData, error: propertiesError } = await supabase
         .from('properties')
         .select('id, title, price, location, status')
         .eq('landlord_id', profile.id);
-
       if (propertiesError) throw propertiesError;
       setProperties(propertiesData || []);
-
-      // Fetch applications for landlord's properties
-      const { data: applicationsData, error: applicationsError } = await supabase
+      // Fetch applications for landlord's properties (paginated)
+      const propertyIds = propertiesData?.map(p => p.id) || [];
+      let query = supabase
         .from('rental_applications')
-        .select(`
-          *,
-          properties!rental_applications_property_id_fkey (
-            id,
-            title,
-            price,
-            location,
-            photo_url
-          )
-        `)
-        .in('property_id', propertiesData?.map(p => p.id) || [])
+        .select(`*, properties!rental_applications_property_id_fkey (id, title, price, location, photo_url)`, { count: 'exact' })
+        .in('property_id', propertyIds)
         .order('created_at', { ascending: false });
-
+      // Server-side status filter
+      if (filterStatus !== 'all') {
+        query = query.eq('status', filterStatus);
+      }
+      // Server-side property filter
+      if (filterProperty !== 'all') {
+        query = query.eq('property_id', filterProperty);
+      }
+      // Server-side search (full_name/email)
+      if (searchQuery.trim()) {
+        query = query.or(`full_name.ilike.%${searchQuery}%,email.ilike.%${searchQuery}%`);
+      }
+      const from = (page - 1) * pageSize;
+      const to = from + pageSize - 1;
+      query = query.range(from, to);
+      const { data: applicationsData, error: applicationsError, count } = await query;
       if (applicationsError) throw applicationsError;
       setApplications(applicationsData || []);
+      setTotalCount(count || 0);
     } catch (error: any) {
       toast({
         title: "Error",
@@ -272,7 +286,7 @@ const ApplicationManagement = () => {
                 <div className="flex items-center">
                   <div className="flex-1">
                     <p className="text-sm font-medium text-gray-600">Total Applications</p>
-                    <p className="text-2xl font-bold text-gray-900">{applications.length}</p>
+                    <p className="text-2xl font-bold text-gray-900">{totalCount}</p>
                   </div>
                   <Users className="w-8 h-8 text-blue-600" />
                 </div>
@@ -383,24 +397,25 @@ const ApplicationManagement = () => {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <FileText className="w-5 h-5" />
-                Applications ({filteredApplications.length})
+                Applications ({totalCount})
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {filteredApplications.length === 0 ? (
+              {applications.length === 0 ? (
                 <div className="text-center py-8">
                   <FileText className="w-12 h-12 text-gray-400 mx-auto mb-4" />
                   <h3 className="text-lg font-medium text-gray-900 mb-2">No applications found</h3>
                   <p className="text-gray-600">
-                    {applications.length === 0 
+                    {totalCount === 0 
                       ? "You haven't received any applications yet." 
                       : "No applications match your current filters."
                     }
                   </p>
                 </div>
               ) : (
+                <>
                 <div className="space-y-4">
-                  {filteredApplications.map((application) => {
+                  {applications.map((application) => {
                     const score = getApplicationScore(application);
                     return (
                       <div
@@ -499,6 +514,39 @@ const ApplicationManagement = () => {
                     );
                   })}
                 </div>
+                {/* Pagination Controls */}
+                <div className="flex justify-center items-center mt-8 gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={currentPage === 1}
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  >
+                    Prev
+                  </Button>
+                  {Array.from({ length: Math.ceil(totalCount / pageSize) }, (_, i) => (
+                    <Button
+                      key={i + 1}
+                      variant={currentPage === i + 1 ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setCurrentPage(i + 1)}
+                    >
+                      {i + 1}
+                    </Button>
+                  ))}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={currentPage === Math.ceil(totalCount / pageSize) || totalCount === 0}
+                    onClick={() => setCurrentPage((p) => Math.min(Math.ceil(totalCount / pageSize), p + 1))}
+                  >
+                    Next
+                  </Button>
+                  <span className="ml-4 text-sm text-gray-500">
+                    Page {currentPage} of {Math.max(1, Math.ceil(totalCount / pageSize))}
+                  </span>
+                </div>
+                </>
               )}
             </CardContent>
           </Card>

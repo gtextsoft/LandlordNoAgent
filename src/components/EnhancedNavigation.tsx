@@ -18,7 +18,8 @@ import {
   ChevronDown,
   Settings,
   Plus,
-  MapPin
+  MapPin,
+  BarChart3
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import {
@@ -111,7 +112,8 @@ const EnhancedNavigation = ({
       ] : []),
       { name: 'Messages', href: '/messages', icon: MessageCircle, active: isActive('/messages'), badge: 2 },
       ...(hasRole('landlord') ? [
-        { name: 'Dashboard', href: '/landlord', icon: Home, active: isActive('/landlord') }
+        { name: 'Dashboard', href: '/landlord', icon: Home, active: isActive('/landlord') },
+        { name: 'Analytics', href: '/analytics', icon: BarChart3, active: isActive('/analytics') }
       ] : [])
     ] : []),
     { name: 'Contact', href: '/contact', icon: MapPin, active: isActive('/contact') }

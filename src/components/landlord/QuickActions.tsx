@@ -117,7 +117,7 @@ const QuickActions = ({ stats, properties = [], onPropertiesUpdate }: QuickActio
       title: "Analytics Dashboard",
       description: "View detailed property performance",
       icon: BarChart3,
-      href: "#analytics",
+      href: "/analytics",
       variant: "outline" as const,
       priority: "medium",
     }

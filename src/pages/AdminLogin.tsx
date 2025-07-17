@@ -47,13 +47,16 @@ const AdminLogin = () => {
       if (error) throw error;
 
       if (data.user) {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('role')
-          .eq('id', data.user.id)
-          .single();
+        // Check if user has admin role in user_roles table
+        const { data: userRoles, error: rolesError } = await supabase.rpc('get_current_user_roles');
+        
+        if (rolesError) {
+          console.error('Error fetching user roles:', rolesError);
+          throw new Error("Error checking user privileges.");
+        }
 
-        if (!profile || profile.role !== 'admin') {
+        // Check if user has admin role
+        if (!userRoles || !userRoles.includes('admin')) {
           await supabase.auth.signOut();
           throw new Error("You don't have admin privileges.");
         }
@@ -105,6 +108,19 @@ const AdminLogin = () => {
       if (profileError) {
         console.error('Profile error:', profileError);
         throw profileError;
+      }
+
+      // Also create admin role in user_roles table
+      const { error: roleError } = await supabase
+        .from('user_roles')
+        .insert({
+          user_id: authData.user.id,
+          role: 'admin'
+        });
+
+      if (roleError) {
+        console.error('Role error:', roleError);
+        throw roleError;
       }
 
       alert(`Admin account created successfully!\nEmail: ${adminEmail}\nPassword: ${adminPassword}\n\nPlease change the password after first login!`);
@@ -187,23 +203,25 @@ const AdminLogin = () => {
                 )}
               </Button>
               
-              {/* Temporary Admin Creation Button - Remove after first admin is created */}
-              <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-                <p className="text-yellow-800 text-sm mb-2">
-                  <strong>First Time Setup:</strong> Click below to create the first admin account
-                </p>
-                <Button 
-                  type="button"
-                  variant="outline"
-                  onClick={createFirstAdmin}
-                  className="w-full border-yellow-400 text-yellow-700 hover:bg-yellow-50"
-                >
-                  Create First Admin Account
-                </Button>
-                <p className="text-xs text-yellow-600 mt-2">
-                  This will create: admin@landlord.com with password: Admin123!
-                </p>
-              </div>
+              {/* Temporary Admin Creation Button - Only show in development mode */}
+              {process.env.NODE_ENV === 'development' && (
+                <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                  <p className="text-yellow-800 text-sm mb-2">
+                    <strong>First Time Setup:</strong> Click below to create the first admin account
+                  </p>
+                  <Button 
+                    type="button"
+                    variant="outline"
+                    onClick={createFirstAdmin}
+                    className="w-full border-yellow-400 text-yellow-700 hover:bg-yellow-50"
+                  >
+                    Create First Admin Account
+                  </Button>
+                  <p className="text-xs text-yellow-600 mt-2">
+                    This will create: admin@landlord.com with password: Admin123!
+                  </p>
+                </div>
+              )}
             </CardFooter>
           </form>
         </Card>

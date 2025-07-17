@@ -32,6 +32,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import RenterDashboard from './pages/RenterDashboard';
 import MyApplications from './pages/MyApplications';
+import Analytics from './pages/Analytics';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -118,7 +119,7 @@ function PaymentGatewayWrapper() {
 }
 
 function AppContent() {
-  const { user, loading, hasRole } = useAuth();
+  const { user, loading, hasRole, primaryRole } = useAuth();
 
   if (loading) {
     return (
@@ -141,11 +142,19 @@ function AppContent() {
         <Route path="/landing" element={<LandingPage />} />
         <Route path="/" element={
           user ? (
-            hasRole('admin') ? 
-            <Navigate to="/admin" replace /> :
-            hasRole('landlord') ? 
-            <Navigate to="/landlord" replace /> : 
-            <Navigate to="/renter" replace />
+            primaryRole === 'admin' ?
+              <Navigate to="/admin" replace /> :
+            primaryRole === 'landlord' ?
+              <Navigate to="/landlord" replace /> :
+            primaryRole === 'renter' ?
+              <Navigate to="/renter" replace /> :
+              // No valid role
+              <div className="min-h-screen flex items-center justify-center">
+                <div className="text-center">
+                  <h2 className="text-2xl font-bold text-red-600 mb-4">Access Denied</h2>
+                  <p className="text-gray-700">Your account does not have a valid role assigned. Please contact support.</p>
+                </div>
+              </div>
           ) : (
             <Navigate to="/landing" replace />
           )
@@ -264,23 +273,15 @@ function AppContent() {
           }
         />
         <Route
-          path="/admin/users"
+          path="/analytics"
           element={
-            <ProtectedRoute allowedRoles={["admin"]}>
-              <AdminPanel />
+            <ProtectedRoute allowedRoles={["landlord"]}>
+              <Analytics />
             </ProtectedRoute>
           }
         />
         <Route
           path="/admin/properties"
-          element={
-            <ProtectedRoute allowedRoles={["admin"]}>
-              <AdminPanel />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/admin/analytics"
           element={
             <ProtectedRoute allowedRoles={["admin"]}>
               <AdminPanel />

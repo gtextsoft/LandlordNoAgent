@@ -77,6 +77,12 @@ const PropertyReviewPanel = () => {
     flaggedConcerns: [],
     verificationScore: 0
   });
+  // Pagination state
+  const [pendingPage, setPendingPage] = useState(1);
+  const [pendingTotal, setPendingTotal] = useState(0);
+  const [allPage, setAllPage] = useState(1);
+  const [allTotal, setAllTotal] = useState(0);
+  const pageSize = 10;
 
   const { toast } = useToast();
   const { profile } = useAuth();
@@ -95,16 +101,19 @@ const PropertyReviewPanel = () => {
 
   useEffect(() => {
     if (activeTab === "review") {
-      fetchPendingProperties();
+      fetchPendingProperties(pendingPage, pageSize);
     } else {
-      fetchAllProperties();
+      fetchAllProperties(allPage, pageSize);
     }
-  }, [activeTab]);
+    // eslint-disable-next-line
+  }, [activeTab, pendingPage, allPage]);
 
-  const fetchAllProperties = async () => {
+  const fetchAllProperties = async (page = 1, pageSize = 10) => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
+      const from = (page - 1) * pageSize;
+      const to = from + pageSize - 1;
+      const { data, error, count } = await supabase
         .from('properties')
         .select(`
           *,
@@ -113,11 +122,12 @@ const PropertyReviewPanel = () => {
             email,
             avatar_url
           )
-        `)
-        .order('created_at', { ascending: false });
-
+        `, { count: 'exact' })
+        .order('created_at', { ascending: false })
+        .range(from, to);
       if (error) throw error;
       setAllProperties(data || []);
+      setAllTotal(count || 0);
     } catch (error) {
       console.error('Error fetching all properties:', error);
       toast({
@@ -130,10 +140,12 @@ const PropertyReviewPanel = () => {
     }
   };
 
-  const fetchPendingProperties = async () => {
+  const fetchPendingProperties = async (page = 1, pageSize = 10) => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
+      const from = (page - 1) * pageSize;
+      const to = from + pageSize - 1;
+      const { data, error, count } = await supabase
         .from('properties')
         .select(`
           *,
@@ -142,12 +154,13 @@ const PropertyReviewPanel = () => {
             email,
             avatar_url
           )
-        `)
+        `, { count: 'exact' })
         .in('status', ['pending', 'under_review', 'flagged'])
-        .order('created_at', { ascending: true });
-
+        .order('created_at', { ascending: true })
+        .range(from, to);
       if (error) throw error;
       setProperties(data || []);
+      setPendingTotal(count || 0);
     } catch (error) {
       console.error('Error fetching properties:', error);
       toast({
@@ -487,6 +500,9 @@ const PropertyReviewPanel = () => {
               </Card>
             )}
           </div>
+          {activeTab === "review" && (
+            <Pagination page={pendingPage} total={pendingTotal} pageSize={pageSize} onPageChange={setPendingPage} />
+          )}
         </TabsContent>
 
         <TabsContent value="manage">
@@ -514,7 +530,7 @@ const PropertyReviewPanel = () => {
                     <SelectItem value="rejected">Rejected</SelectItem>
                   </SelectContent>
                 </Select>
-                <Button variant="outline" onClick={fetchAllProperties}>
+                <Button variant="outline" onClick={() => fetchAllProperties(allPage, pageSize)}>
                   <RefreshCw className="w-4 h-4 mr-2" />
                   Refresh
                 </Button>
@@ -655,6 +671,9 @@ const PropertyReviewPanel = () => {
               </Card>
             )}
           </div>
+          {activeTab === "manage" && (
+            <Pagination page={allPage} total={allTotal} pageSize={pageSize} onPageChange={setAllPage} />
+          )}
         </TabsContent>
       </Tabs>
 
@@ -841,6 +860,28 @@ const PropertyReviewPanel = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+};
+
+// Pagination controls component
+const Pagination = ({ page, total, pageSize, onPageChange }: { page: number, total: number, pageSize: number, onPageChange: (p: number) => void }) => {
+  const totalPages = Math.ceil(total / pageSize);
+  if (totalPages <= 1) return null;
+  return (
+    <div className="flex items-center justify-center gap-2 mt-4">
+      <Button variant="outline" size="sm" onClick={() => onPageChange(page - 1)} disabled={page === 1}>Prev</Button>
+      {Array.from({ length: totalPages }, (_, i) => (
+        <Button
+          key={i + 1}
+          variant={page === i + 1 ? "default" : "outline"}
+          size="sm"
+          onClick={() => onPageChange(i + 1)}
+        >
+          {i + 1}
+        </Button>
+      ))}
+      <Button variant="outline" size="sm" onClick={() => onPageChange(page + 1)} disabled={page === totalPages}>Next</Button>
     </div>
   );
 };

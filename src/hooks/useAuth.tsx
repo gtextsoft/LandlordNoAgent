@@ -58,36 +58,32 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const fetchUserRoles = async (userId: string): Promise<string[]> => {
     try {
-      // Use the new security definer function
-      const { data, error } = await supabase.rpc('get_current_user_roles')
+      // Use the safe function to get current user roles with better error handling
+      const { data, error } = await supabase.rpc('get_user_roles_safe', { _user_id: userId })
       
       if (error) {
         console.error('Error fetching user roles:', error)
         
-        // Fallback: Try to get role from profile as a last resort
+        // Fallback: Try to get role from profile and sync to user_roles
         const profile = await fetchProfile(userId);
         if (profile?.role) {
-          console.warn('Using profile role as fallback for user:', userId);
-          return [profile.role];
-        }
-        return []
-      }
-      
-      // If RPC returns empty but user has profile role, sync them
-      if ((!data || data.length === 0)) {
-        const profile = await fetchProfile(userId);
-        if (profile?.role) {
-          console.log('Syncing profile role to user_roles table for user:', userId);
+          console.warn('Syncing profile role to user_roles table for user:', userId);
           // Upsert the role into user_roles table for consistency
-          await supabase.from('user_roles').upsert({
+          const { error: syncError } = await supabase.from('user_roles').upsert({
             user_id: userId,
             role: profile.role
           }, {
             onConflict: 'user_id,role'
           });
           
+          if (syncError) {
+            console.error('Error syncing role to user_roles:', syncError);
+            return [];
+          }
+          
           return [profile.role];
         }
+        return []
       }
       
       return data || []
@@ -99,6 +95,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const createProfile = async (userId: string, email: string, role: UserRoleType, fullName: string): Promise<Profile | null> => {
     try {
+      // Create profile first
       const { data, error } = await supabase
         .from('profiles')
         .insert({
@@ -115,13 +112,19 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         return null
       }
 
-      // Also create the role in user_roles table
-      await supabase
+      // Also create the role in user_roles table for consistency
+      const { error: roleError } = await supabase
         .from('user_roles')
         .insert({
           user_id: userId,
           role
         })
+
+      if (roleError) {
+        console.error('Error creating user role:', roleError)
+        // Don't fail the entire operation if role creation fails
+        // The get_current_user_roles function will handle this
+      }
 
       return data
     } catch (error) {
@@ -136,120 +139,122 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       return false;
     }
 
-    // Only rely on userRoles from the user_roles table
+    // Only rely on userRoles from the user_roles table for security
     if (!userRoles || userRoles.length === 0) {
-      console.warn('User roles not loaded. Access denied.');
+      console.warn('User roles not loaded or empty. Access denied.');
       return false;
     }
     return userRoles.includes(role);
   }
 
-  const getPrimaryRole = (): UserRoleType => {
-    if (userRoles.includes('admin')) return 'admin'
-    if (userRoles.includes('landlord')) return 'landlord'
-    return 'renter'
-  }
+  const getPrimaryRole = (): UserRoleType | null => {
+    if (!userRoles || userRoles.length === 0) {
+      return null;
+    }
+    
+    // Priority: admin > landlord > renter
+    if (userRoles.includes('admin')) return 'admin';
+    if (userRoles.includes('landlord')) return 'landlord';
+    if (userRoles.includes('renter')) return 'renter';
+    return null; // No valid role found
+  };
 
   useEffect(() => {
-    let mounted = true
+    let mounted = true;
 
     const initializeAuth = async () => {
       try {
-        const { data: { session }, error } = await supabase.auth.getSession()
-        
+        const { data: { session }, error } = await supabase.auth.getSession();
         if (error) {
-          console.error('Error getting session:', error)
-          if (mounted) {
-            setLoading(false)
-          }
-          return
+          console.error('Error getting session:', error);
+          if (mounted) setLoading(false);
+          return;
         }
-
-        if (!mounted) return
-
-        console.log('Initial session:', session?.user?.id)
-        setSession(session)
-        setUser(session?.user ?? null)
-
+        if (!mounted) return;
+        setSession(session);
+        setUser(session?.user ?? null);
         if (session?.user) {
+          // Always ensure user_roles is up to date for all roles
           const [profileData, rolesData] = await Promise.all([
             fetchProfile(session.user.id),
             fetchUserRoles(session.user.id)
-          ])
-          
+          ]);
+          // If user has a profile but not in user_roles, upsert
+          if (profileData && (!rolesData || rolesData.length === 0)) {
+            await supabase.from('user_roles').upsert({
+              user_id: session.user.id,
+              role: profileData.role
+            }, { onConflict: 'user_id,role' });
+          }
           if (mounted) {
-            setProfile(profileData)
-            setUserRoles(rolesData)
+            setProfile(profileData);
+            setUserRoles(rolesData && rolesData.length > 0 ? rolesData : [profileData?.role].filter(Boolean));
           }
         }
-
-        if (mounted) {
-          setLoading(false)
-        }
+        if (mounted) setLoading(false);
       } catch (error) {
-        console.error('Error initializing auth:', error)
-        if (mounted) {
-          setLoading(false)
-        }
+        console.error('Error initializing auth:', error);
+        if (mounted) setLoading(false);
       }
-    }
+    };
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        if (!mounted) return
-
-        console.log('Auth state changed:', event, session?.user?.id)
-
-        setSession(session)
-        setUser(session?.user ?? null)
-
+        if (!mounted) return;
+        setSession(session);
+        setUser(session?.user ?? null);
         if (session?.user) {
           setTimeout(async () => {
-            if (!mounted) return
-            
-            let profileData = await fetchProfile(session.user.id)
-            const rolesData = await fetchUserRoles(session.user.id)
-            
+            if (!mounted) return;
+            let profileData = await fetchProfile(session.user.id);
+            let rolesData = await fetchUserRoles(session.user.id);
+            // Always upsert user_roles for all roles
+            if (profileData && (!rolesData || rolesData.length === 0)) {
+              await supabase.from('user_roles').upsert({
+                user_id: session.user.id,
+                role: profileData.role
+              }, { onConflict: 'user_id,role' });
+              rolesData = [profileData.role];
+            }
             if (!profileData && session.user.user_metadata) {
-              const { role, full_name } = session.user.user_metadata
+              const { role, full_name } = session.user.user_metadata;
               if (role && full_name) {
                 profileData = await createProfile(
                   session.user.id,
                   session.user.email!,
                   role,
                   full_name
-                )
+                );
+                // Upsert user_roles for new profile
+                await supabase.from('user_roles').upsert({
+                  user_id: session.user.id,
+                  role
+                }, { onConflict: 'user_id,role' });
+                rolesData = [role];
               }
             }
-            
             if (mounted) {
-              setProfile(profileData)
-              setUserRoles(rolesData)
+              setProfile(profileData);
+              setUserRoles(rolesData && rolesData.length > 0 ? rolesData : [profileData?.role].filter(Boolean));
             }
-          }, 0)
+          }, 0);
         } else {
-          setProfile(null)
-          setUserRoles([])
+          setProfile(null);
+          setUserRoles([]);
         }
-
         if (event === 'SIGNED_OUT') {
-          setProfile(null)
-          setUserRoles([])
+          setProfile(null);
+          setUserRoles([]);
         }
-
-        if (mounted) {
-          setLoading(false)
-        }
+        if (mounted) setLoading(false);
       }
-    )
-
-    initializeAuth()
-
+    );
+    initializeAuth();
     return () => {
-      mounted = false
-      subscription.unsubscribe()
-    }
-  }, [])
+      mounted = false;
+      subscription.unsubscribe();
+    };
+  }, []);
 
   const signUp = async (email: string, password: string, role: UserRoleType, fullName: string) => {
     try {

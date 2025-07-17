@@ -35,8 +35,20 @@ const ProtectedRoute = ({ children, allowedRoles }: ProtectedRouteProps) => {
         return <Navigate to="/admin" replace />
       } else if (primaryRole === 'landlord') {
         return <Navigate to="/landlord" replace />
-      } else {
+      } else if (primaryRole === 'renter') {
         return <Navigate to="/renter" replace />
+      } else {
+        // No valid role, show error or redirect
+        return (
+          <div className="min-h-screen flex items-center justify-center">
+            <div className="text-center">
+              <h2 className="text-2xl font-bold text-red-600 mb-4">Access Denied</h2>
+              <p className="text-gray-700 mb-4">Your account does not have a valid role assigned. Please contact support.</p>
+              <p className="text-sm text-gray-500">Required roles: {allowedRoles.join(', ')}</p>
+              <p className="text-sm text-gray-500">Your current role: {primaryRole || 'None'}</p>
+            </div>
+          </div>
+        );
       }
     }
   }

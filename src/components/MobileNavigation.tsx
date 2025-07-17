@@ -15,7 +15,8 @@ import {
   Menu,
   X,
   Bell,
-  Settings
+  Settings,
+  BarChart3
 } from "lucide-react";
 import { motion } from "framer-motion";
 
@@ -47,6 +48,7 @@ const MobileNavigation = ({ unreadCount = 0 }: MobileNavigationProps) => {
         { path: "/landlord/properties", icon: Building, label: "Properties" },
         { path: "/landlord/new", icon: Plus, label: "Add" },
         { path: "/messages", icon: MessageCircle, label: "Messages", badge: unreadCount },
+        { path: "/analytics", icon: BarChart3, label: "Analytics" },
       ];
     }
 
@@ -148,6 +150,16 @@ const MobileNavigation = ({ unreadCount = 0 }: MobileNavigationProps) => {
                             >
                               <Plus className="w-5 h-5 mr-3" />
                               Add Property
+                            </Link>
+                            <Link
+                              to="/analytics"
+                              className={`flex items-center px-4 py-3 text-sm font-medium hover:bg-gray-50 ${
+                                isActive('/analytics') ? 'text-blue-600 bg-blue-50' : 'text-gray-700'
+                              }`}
+                              onClick={() => setIsOpen(false)}
+                            >
+                              <BarChart3 className="w-5 h-5 mr-3" />
+                              Analytics
                             </Link>
                           </>
                         ) : (

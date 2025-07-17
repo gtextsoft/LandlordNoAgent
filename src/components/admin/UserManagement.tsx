@@ -43,6 +43,7 @@ import {
   Download,
   Filter,
 } from 'lucide-react';
+import { assignUserRole, validateRoleTransition } from '@/utils/roleManagement'
 
 type UserRole = Database['public']['Enums']['user_role'];
 
@@ -147,27 +148,25 @@ const UserManagement = () => {
 
   const handleRoleChange = async (userId: string, newRole: UserRole) => {
     try {
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .update({ role: newRole, updated_at: new Date().toISOString() })
-        .eq('id', userId);
+      // Get current user's role to validate transition
+      const currentUser = users.find(u => u.id === userId);
+      if (!currentUser) {
+        throw new Error('User not found');
+      }
 
-      if (profileError) throw profileError;
+      // Validate role transition
+      if (!validateRoleTransition(currentUser.role as UserRoleType, newRole)) {
+        throw new Error(`Invalid role transition from ${currentUser.role} to ${newRole}`);
+      }
 
-      // Update user_roles table
-      const { error: roleError } = await supabase
-        .from('user_roles')
-        .upsert({
-          user_id: userId,
-          role: newRole,
-          created_at: new Date().toISOString()
-        }, {
-          onConflict: 'user_id,role'
-        });
+      // Use the role management utility
+      const result = await assignUserRole(userId, newRole);
+      
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to update user role');
+      }
 
-      if (roleError) throw roleError;
-
-              handleSuccess(toast, 'User role updated successfully');
+      handleSuccess(toast, 'User role updated successfully');
       fetchUsers();
     } catch (error: any) {
       handleError(error, toast);

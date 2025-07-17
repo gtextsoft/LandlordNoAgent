@@ -11,15 +11,8 @@ import { debugDatabase, createSampleData } from "@/utils/databaseDebug";
 
 import DashboardStats from "@/components/landlord/DashboardStats";
 import QuickActions from "@/components/landlord/QuickActions";
-import PropertyManagement from "@/components/landlord/PropertyManagement";
-import MessagesSection from "@/components/landlord/MessagesSection";
-import AnalyticsDashboard from "@/components/landlord/AnalyticsDashboard";
-import RevenueTracking from "@/components/landlord/RevenueTracking";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { BarChart3, Home, MessageCircle, TrendingUp, Calendar, DollarSign } from "lucide-react";
-import { Link } from "react-router-dom";
+import { BarChart3, TrendingUp, Calendar, DollarSign } from "lucide-react";
 
 interface ChatRoom {
   id: string;
@@ -47,7 +40,6 @@ const LandlordDashboard = () => {
   const [statsLoading, setStatsLoading] = useState(true);
   const [propertiesLoading, setPropertiesLoading] = useState(true);
   const [messagesLoading, setMessagesLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState("overview");
   const { profile, hasRole } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -224,44 +216,6 @@ const LandlordDashboard = () => {
     }
   };
 
-  const handleToggleStatus = async (propertyId: string, currentStatus: string) => {
-    try {
-      const newStatus = currentStatus === 'active' ? 'inactive' : 'active';
-      
-      const { error } = await supabase
-        .from('properties')
-        .update({ status: newStatus })
-        .eq('id', propertyId);
-
-      if (error) throw error;
-
-      await fetchProperties();
-      handleSuccess(toast, `Property ${newStatus === 'active' ? 'activated' : 'suspended'} successfully.`);
-    } catch (error: any) {
-      handleError(error, toast, 'Failed to update property status');
-    }
-  };
-
-  const handleDelete = async (propertyId: string) => {
-    if (!confirm("Are you sure you want to delete this property? This action cannot be undone.")) {
-      return;
-    }
-
-    try {
-      const { error } = await supabase
-        .from('properties')
-        .delete()
-        .eq('id', propertyId);
-
-      if (error) throw error;
-
-      await fetchProperties();
-      handleSuccess(toast, 'Property deleted successfully.');
-    } catch (error: any) {
-      handleError(error, toast, 'Failed to delete property');
-    }
-  };
-
   // Calculate occupancy rate
   const occupancyRate = stats.totalProperties > 0 
     ? Math.round((stats.activeProperties / stats.totalProperties) * 100)
@@ -286,146 +240,88 @@ const LandlordDashboard = () => {
   return (
     <Layout>
       <div className="container mx-auto p-6 space-y-6">
-        <Tabs defaultValue="overview" value={activeTab} onValueChange={setActiveTab}>
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
-            <TabsList>
-              <TabsTrigger value="overview" className="flex items-center">
-                <BarChart3 className="w-4 h-4 mr-2" />
-                Overview
-              </TabsTrigger>
-              <TabsTrigger value="analytics" className="flex items-center">
-                <TrendingUp className="w-4 h-4 mr-2" />
-                Analytics
-              </TabsTrigger>
-              <TabsTrigger value="properties" className="flex items-center">
-                <Home className="w-4 h-4 mr-2" />
-                Properties
-              </TabsTrigger>
-              <TabsTrigger value="messages" className="flex items-center">
-                <MessageCircle className="w-4 h-4 mr-2" />
-                Messages
-              </TabsTrigger>
-            </TabsList>
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
+            <p className="text-gray-600 mt-2">Welcome back! Here's an overview of your property business.</p>
           </div>
+        </div>
 
-          <TabsContent value="overview" className="space-y-6">
-            {/* Stats Cards */}
-            <div className="animate-fade-in">
-              <DashboardStats 
-                stats={stats} 
-                properties={properties}
-                loading={statsLoading} 
-              />
-            </div>
+        {/* Stats Cards */}
+        <div className="animate-fade-in">
+          <DashboardStats 
+            stats={stats} 
+            properties={properties}
+            loading={statsLoading} 
+          />
+        </div>
 
-            {/* Quick Actions */}
-            <div className="animate-fade-in">
-              <QuickActions 
-                stats={{
-                  totalProperties: stats.totalProperties,
-                  activeProperties: stats.activeProperties,
-                  totalViews: stats.totalViews,
-                  totalInquiries: stats.totalInquiries
-                }}
-              />
-            </div>
+        {/* Quick Actions */}
+        <div className="animate-fade-in">
+          <QuickActions 
+            stats={{
+              totalProperties: stats.totalProperties,
+              activeProperties: stats.activeProperties,
+              totalViews: stats.totalViews,
+              totalInquiries: stats.totalInquiries
+            }}
+          />
+        </div>
 
-            {/* Recent Properties & Messages */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Recent Properties */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center">
-                    <Home className="w-5 h-5 mr-2" />
-                    Recent Properties
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {properties.slice(0, 3).map((property) => (
-                    <div key={property.id} className="flex items-center space-x-4 p-3 rounded-lg hover:bg-gray-50 transition-colors">
-                      <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center text-white font-bold">
-                        {property.title.charAt(0)}
-                      </div>
-                      <div className="flex-1">
-                        <h4 className="font-medium text-gray-900">{property.title}</h4>
-                        <p className="text-sm text-gray-600">{property.location}</p>
-                        <div className="flex items-center space-x-2 mt-1">
-                          <Badge variant={property.status === 'active' ? 'default' : 'secondary'}>
-                            {property.status}
-                          </Badge>
-                          <span className="text-sm font-medium text-green-600">
-                            ₦{property.price?.toLocaleString()}/month
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                  {properties.length === 0 && (
-                    <div className="text-center py-8 text-gray-500">
-                      <Home className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-                      <p>No properties yet</p>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+        {/* Key Metrics Summary */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Total Properties</CardTitle>
+              <BarChart3 className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{stats.totalProperties}</div>
+              <p className="text-xs text-muted-foreground">
+                {stats.activeProperties} active
+              </p>
+            </CardContent>
+          </Card>
 
-              {/* Recent Messages */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center">
-                    <MessageCircle className="w-5 h-5 mr-2" />
-                    Recent Messages
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {chatRooms.slice(0, 3).map((room) => (
-                    <div key={room.id} className="flex items-center space-x-4 p-3 rounded-lg hover:bg-gray-50 transition-colors">
-                      <div className="w-12 h-12 bg-gradient-to-r from-purple-500 to-pink-600 rounded-full flex items-center justify-center text-white font-bold">
-                        {room.renter_profile?.full_name?.charAt(0) || '?'}
-                      </div>
-                      <div className="flex-1">
-                        <h4 className="font-medium text-gray-900">
-                          {room.renter_profile?.full_name || 'Unknown User'}
-                        </h4>
-                        <p className="text-sm text-gray-600">{room.properties?.title}</p>
-                        <p className="text-xs text-gray-400">
-                          {new Date(room.created_at).toLocaleDateString()}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                  {chatRooms.length === 0 && (
-                    <div className="text-center py-8 text-gray-500">
-                      <MessageCircle className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-                      <p>No messages yet</p>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-          </TabsContent>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Monthly Revenue</CardTitle>
+              <DollarSign className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">₦{stats.monthlyRevenue?.toLocaleString()}</div>
+              <p className="text-xs text-muted-foreground">
+                Estimated monthly
+              </p>
+            </CardContent>
+          </Card>
 
-          <TabsContent value="analytics" className="space-y-6">
-            <AnalyticsDashboard 
-              properties={properties}
-              loading={statsLoading}
-            />
-          </TabsContent>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Total Views</CardTitle>
+              <TrendingUp className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{stats.totalViews}</div>
+              <p className="text-xs text-muted-foreground">
+                Property views
+              </p>
+            </CardContent>
+          </Card>
 
-          <TabsContent value="properties" className="space-y-6">
-            <PropertyManagement
-              properties={properties}
-              onToggleStatus={handleToggleStatus}
-              onDelete={handleDelete}
-              onUpdate={fetchProperties}
-              loading={propertiesLoading}
-            />
-          </TabsContent>
-
-          <TabsContent value="messages" className="space-y-6">
-            <MessagesSection chatRooms={chatRooms} loading={messagesLoading} />
-          </TabsContent>
-        </Tabs>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Total Inquiries</CardTitle>
+              <Calendar className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{stats.totalInquiries}</div>
+              <p className="text-xs text-muted-foreground">
+                {stats.newInquiriesThisWeek} this week
+              </p>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </Layout>
   );

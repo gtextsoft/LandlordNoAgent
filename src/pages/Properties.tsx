@@ -200,7 +200,14 @@ const Properties = () => {
   };
 
   // Enhanced search handlers with useCallback for performance
-  const handleSearch = useCallback((query: string, filters: any) => {
+  const handleSearch = useCallback((query: string, filters: {
+    location?: string;
+    propertyType?: string;
+    bedrooms?: string;
+    bathrooms?: string;
+    amenities?: string[];
+    priceRange?: [number, number];
+  }) => {
     setSearchQuery(query);
     // Apply enhanced filters
     if (filters.location) setLocationFilter(filters.location);

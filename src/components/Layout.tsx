@@ -18,7 +18,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { useAuth } from "@/hooks/useAuth";
-import { Building, Home, MessageSquare, LogOut, User, Shield, Heart, Menu, X, Plus, Bell, Palette, Moon, Sun, MessageCircle, CheckCircle, AlertCircle, DollarSign, Wrench, Calendar, FileText } from "lucide-react";
+import { Building, Home, MessageSquare, LogOut, User, Shield, Heart, Menu, X, Plus, Bell, Palette, Moon, Sun, MessageCircle, CheckCircle, AlertCircle, DollarSign, Wrench, Calendar, FileText, BarChart3 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { NotificationService, Notification as DBNotification } from "@/services/notificationService";
 import { useToast } from "@/hooks/use-toast";
@@ -341,6 +341,7 @@ const Layout = ({ children, showNav = true }: LayoutProps) => {
           { to: "/landlord", icon: Building, label: "Dashboard", active: isActive('/landlord') },
           { to: "/landlord/properties", icon: Home, label: "My Properties", active: isActive('/landlord/properties') },
           { to: "/landlord/new", icon: Plus, label: "New Listing", active: isActive('/landlord/new') },
+          { to: "/analytics", icon: BarChart3, label: "Analytics", active: isActive('/analytics') },
           { to: "/messages", icon: MessageSquare, label: "Messages", active: isActive('/messages') },
           { to: "/account", icon: User, label: "Account Settings", active: isActive('/account') },
         ]

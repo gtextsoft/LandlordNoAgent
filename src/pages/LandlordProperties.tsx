@@ -33,11 +33,13 @@ import { handleError, handleSuccess } from "@/utils/errorHandling";
 
 const LandlordProperties = () => {
   const [properties, setProperties] = useState<Property[]>([]);
-  const [filteredProperties, setFilteredProperties] = useState<Property[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [sortBy, setSortBy] = useState("newest");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const pageSize = 10;
   const { profile, hasRole } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -47,72 +49,63 @@ const LandlordProperties = () => {
       navigate('/');
       return;
     }
-    fetchProperties();
-  }, [profile, hasRole, navigate]);
+    fetchProperties(currentPage);
+    // eslint-disable-next-line
+  }, [profile, hasRole, navigate, currentPage]);
 
   useEffect(() => {
-    filterAndSortProperties();
-  }, [properties, searchQuery, statusFilter, sortBy]);
+    setCurrentPage(1);
+    fetchProperties(1);
+    // eslint-disable-next-line
+  }, [searchQuery, statusFilter, sortBy]);
 
-  const fetchProperties = async () => {
+  const fetchProperties = async (page = 1) => {
     if (!profile) return;
-
     try {
       setLoading(true);
-      const { data, error } = await supabase
+      const from = (page - 1) * pageSize;
+      const to = from + pageSize - 1;
+      let query = supabase
         .from('properties')
-        .select(`
-          *,
-          profiles!properties_landlord_id_fkey (*)
-        `)
+        .select(`*, profiles!properties_landlord_id_fkey (*)`, { count: 'exact' })
         .eq('landlord_id', profile.id)
-        .order('created_at', { ascending: false });
-
+        .order('created_at', { ascending: false })
+        .range(from, to);
+      // Server-side status filter
+      if (statusFilter !== "all") {
+        query = query.eq('status', statusFilter);
+      }
+      // Server-side search (title/location/description)
+      if (searchQuery.trim()) {
+        query = query.or(`title.ilike.%${searchQuery}%,location.ilike.%${searchQuery}%,description.ilike.%${searchQuery}%`);
+      }
+      const { data, error, count } = await query;
       if (error) throw error;
-      setProperties((data as any) || []);
+      let sorted = (data as any) || [];
+      // In-memory sort (on current page)
+      sorted.sort((a, b) => {
+        switch (sortBy) {
+          case "newest":
+            return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+          case "oldest":
+            return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+          case "price-high":
+            return (b.price || 0) - (a.price || 0);
+          case "price-low":
+            return (a.price || 0) - (b.price || 0);
+          case "title":
+            return (a.title || "").localeCompare(b.title || "");
+          default:
+            return 0;
+        }
+      });
+      setProperties(sorted);
+      setTotalCount(count || 0);
     } catch (error: any) {
       handleError(error, toast, 'Failed to load properties');
     } finally {
       setLoading(false);
     }
-  };
-
-  const filterAndSortProperties = () => {
-    let filtered = [...properties];
-
-    // Apply search filter
-    if (searchQuery.trim()) {
-      filtered = filtered.filter(property =>
-        property.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        property.location?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        property.description?.toLowerCase().includes(searchQuery.toLowerCase())
-      );
-    }
-
-    // Apply status filter
-    if (statusFilter !== "all") {
-      filtered = filtered.filter(property => property.status === statusFilter);
-    }
-
-    // Apply sorting
-    filtered.sort((a, b) => {
-      switch (sortBy) {
-        case "newest":
-          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-        case "oldest":
-          return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
-        case "price-high":
-          return (b.price || 0) - (a.price || 0);
-        case "price-low":
-          return (a.price || 0) - (b.price || 0);
-        case "title":
-          return (a.title || "").localeCompare(b.title || "");
-        default:
-          return 0;
-      }
-    });
-
-    setFilteredProperties(filtered);
   };
 
   const handleToggleStatus = async (propertyId: string, currentStatus: string) => {
@@ -227,7 +220,7 @@ const LandlordProperties = () => {
           <Card className="bg-gradient-to-r from-blue-50 to-blue-100 border-blue-200">
             <CardContent className="p-6 text-center">
               <Building className="w-8 h-8 text-blue-600 mx-auto mb-2" />
-              <h3 className="text-2xl font-bold text-blue-900">{properties.length}</h3>
+              <h3 className="text-2xl font-bold text-blue-900">{totalCount}</h3>
               <p className="text-blue-700">Total Properties</p>
             </CardContent>
           </Card>
@@ -246,7 +239,7 @@ const LandlordProperties = () => {
             <CardContent className="p-6 text-center">
               <Users className="w-8 h-8 text-purple-600 mx-auto mb-2" />
               <h3 className="text-2xl font-bold text-purple-900">
-                {Math.round((properties.filter(p => p.status === 'active').length / Math.max(properties.length, 1)) * 100)}%
+                {Math.round((properties.filter(p => p.status === 'active').length / Math.max(totalCount, 1)) * 100)}%
               </h3>
               <p className="text-purple-700">Occupancy Rate</p>
             </CardContent>
@@ -308,7 +301,7 @@ const LandlordProperties = () => {
             {(searchQuery || statusFilter !== "all") && (
               <div className="mt-3 flex items-center justify-between">
                 <p className="text-sm text-gray-600">
-                  Showing {filteredProperties.length} of {properties.length} properties
+                  Showing {properties.length} of {totalCount} properties
                 </p>
                 <Button
                   size="sm"
@@ -326,15 +319,15 @@ const LandlordProperties = () => {
         </Card>
 
         {/* Properties Grid */}
-        {filteredProperties.length === 0 ? (
+        {properties.length === 0 ? (
           <Card>
             <CardContent className="p-12 text-center">
               <Building className="w-16 h-16 text-gray-400 mx-auto mb-4" />
               <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                {properties.length === 0 ? "No properties yet" : "No properties match your filters"}
+                {totalCount === 0 ? "No properties yet" : "No properties match your filters"}
               </h3>
               <p className="text-gray-600 mb-6">
-                {properties.length === 0 
+                {totalCount === 0 
                   ? "Start by adding your first property to attract potential renters."
                   : "Try adjusting your search or filter criteria."
                 }
@@ -348,8 +341,9 @@ const LandlordProperties = () => {
             </CardContent>
           </Card>
         ) : (
+          <>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredProperties.map((property) => (
+            {properties.map((property) => (
               <Card key={property.id} className="hover:shadow-lg transition-shadow duration-200">
                 <CardContent className="p-0">
                   {/* Property Image */}
@@ -451,6 +445,39 @@ const LandlordProperties = () => {
               </Card>
             ))}
           </div>
+          {/* Pagination Controls */}
+          <div className="flex justify-center items-center mt-8 gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={currentPage === 1}
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+            >
+              Prev
+            </Button>
+            {Array.from({ length: Math.ceil(totalCount / pageSize) }, (_, i) => (
+              <Button
+                key={i + 1}
+                variant={currentPage === i + 1 ? "default" : "outline"}
+                size="sm"
+                onClick={() => setCurrentPage(i + 1)}
+              >
+                {i + 1}
+              </Button>
+            ))}
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={currentPage === Math.ceil(totalCount / pageSize) || totalCount === 0}
+              onClick={() => setCurrentPage((p) => Math.min(Math.ceil(totalCount / pageSize), p + 1))}
+            >
+              Next
+            </Button>
+            <span className="ml-4 text-sm text-gray-500">
+              Page {currentPage} of {Math.max(1, Math.ceil(totalCount / pageSize))}
+            </span>
+          </div>
+          </>
         )}
       </div>
     </Layout>

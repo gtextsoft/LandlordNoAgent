@@ -48,7 +48,8 @@ import {
   Mail,
   Bell,
   CheckCircle,
-  AlertCircle
+  AlertCircle,
+  BarChart3
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -493,6 +494,13 @@ export const UserStateMenu = () => {
         icon: Plus,
         action: () => navigate('/landlord/new'),
         highlight: true
+      });
+      
+      items.push({
+        label: 'Analytics',
+        icon: BarChart3,
+        action: () => navigate('/analytics'),
+        highlight: false
       });
     }
 
