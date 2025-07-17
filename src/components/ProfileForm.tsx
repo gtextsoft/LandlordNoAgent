@@ -13,7 +13,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
+import supabase from "@/integrations/supabase/client";
 import { useAuth, type Profile } from "@/hooks/useAuth";
 import { useState } from "react";
 import AvatarUpload from "@/components/AvatarUpload";

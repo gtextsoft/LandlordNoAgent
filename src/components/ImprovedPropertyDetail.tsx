@@ -240,9 +240,6 @@ const ImprovedPropertyDetail = ({
                   <Button size="sm" variant="secondary" className="bg-white/90 hover:bg-white">
                     <Play className="w-4 h-4" />
                   </Button>
-                  <Button size="sm" variant="secondary" className="bg-white/90 hover:bg-white">
-                    <Map className="w-4 h-4" />
-                  </Button>
                 </div>
               </div>
             </Card>
@@ -360,11 +357,14 @@ const ImprovedPropertyDetail = ({
                   <TabsContent value="location" className="space-y-6">
                     <div>
                       <h3 className="font-semibold text-gray-900 mb-4">Location & Neighborhood</h3>
-                      <div className="bg-gray-200 h-64 rounded-lg flex items-center justify-center">
-                        <div className="text-center text-gray-500">
-                          <Map className="w-12 h-12 mx-auto mb-2" />
-                          <p>Interactive map would go here</p>
+                      <div className="p-6 bg-gray-50 rounded-lg">
+                        <div className="flex items-center text-gray-600 mb-4">
+                          <MapPin className="w-5 h-5 mr-2" />
+                          <span className="font-medium">{property.location}</span>
                         </div>
+                        <p className="text-gray-600">
+                          This property is located in a desirable neighborhood with easy access to local amenities and transportation.
+                        </p>
                       </div>
                       <div className="mt-4 p-4 bg-blue-50 rounded-lg">
                         <h4 className="font-medium text-blue-900 mb-2">Nearby Places</h4>

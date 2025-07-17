@@ -1,4 +1,4 @@
-import { supabase } from '@/integrations/supabase/client';
+import supabase from '@/integrations/supabase/client';
 import { Property as BaseProperty } from '@/lib/supabase';
 import { PropertyTransaction, PropertyFinancialMetrics } from '@/integrations/supabase/types';
 

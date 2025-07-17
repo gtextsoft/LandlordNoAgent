@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Upload, User as UserIcon } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/integrations/supabase/client';
+import supabase from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 
 interface AvatarUploadProps {

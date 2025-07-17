@@ -56,45 +56,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
   };
 
-  const fetchUserRoles = async (userId: string): Promise<string[]> => {
-    try {
-      // Use the safe function to get current user roles with better error handling
-      const { data, error } = await supabase.rpc('get_user_roles_safe', { _user_id: userId })
-      
-      if (error) {
-        console.error('Error fetching user roles:', error)
-        
-        // Fallback: Try to get role from profile and sync to user_roles
-        const profile = await fetchProfile(userId);
-        if (profile?.role) {
-          console.warn('Syncing profile role to user_roles table for user:', userId);
-          // Upsert the role into user_roles table for consistency
-          const { error: syncError } = await supabase.from('user_roles').upsert({
-            user_id: userId,
-            role: profile.role
-          }, {
-            onConflict: 'user_id,role'
-          });
-          
-          if (syncError) {
-            console.error('Error syncing role to user_roles:', syncError);
-            return [];
-          }
-          
-          return [profile.role];
-        }
-        return []
-      }
-      
-      return data || []
-    } catch (error) {
-      console.error('Error fetching user roles:', error)
-      return []
-    }
-  }
-
   const createProfile = async (userId: string, email: string, role: UserRoleType, fullName: string): Promise<Profile | null> => {
     try {
+      console.log('Creating profile for user:', userId, 'with role:', role);
+      
       // Create profile first
       const { data, error } = await supabase
         .from('profiles')
@@ -109,6 +74,21 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
       if (error) {
         console.error('Error creating profile:', error)
+        // If profile already exists, try to fetch it
+        if (error.code === '23505') { // Unique constraint violation
+          const { data: existingProfile, error: fetchError } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', userId)
+            .single()
+          
+          if (fetchError) {
+            console.error('Error fetching existing profile:', fetchError)
+            return null
+          }
+          
+          return existingProfile
+        }
         return null
       }
 
@@ -126,10 +106,27 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         // The get_current_user_roles function will handle this
       }
 
+      console.log('Successfully created profile and user role for user:', userId)
       return data
     } catch (error) {
       console.error('Error creating profile:', error)
       return null
+    }
+  }
+
+  const fetchUserRoles = async (userId: string): Promise<string[]> => {
+    try {
+      const { data, error } = await supabase.rpc('get_current_user_roles');
+      
+      if (error) {
+        console.error('Error fetching user roles:', error);
+        return [];
+      }
+      
+      return data ? data.map((row: any) => row.role) : [];
+    } catch (error) {
+      console.error('Error fetching user roles:', error);
+      return [];
     }
   }
 
@@ -179,16 +176,25 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             fetchProfile(session.user.id),
             fetchUserRoles(session.user.id)
           ]);
+          
           // If user has a profile but not in user_roles, upsert
           if (profileData && (!rolesData || rolesData.length === 0)) {
             await supabase.from('user_roles').upsert({
               user_id: session.user.id,
               role: profileData.role
             }, { onConflict: 'user_id,role' });
-          }
-          if (mounted) {
-            setProfile(profileData);
-            setUserRoles(rolesData && rolesData.length > 0 ? rolesData : [profileData?.role].filter(Boolean));
+            
+            // Refetch roles after upsert
+            const updatedRoles = await fetchUserRoles(session.user.id);
+            if (mounted) {
+              setProfile(profileData);
+              setUserRoles(updatedRoles.length > 0 ? updatedRoles : [profileData.role]);
+            }
+          } else {
+            if (mounted) {
+              setProfile(profileData);
+              setUserRoles(rolesData && rolesData.length > 0 ? rolesData : [profileData?.role].filter(Boolean));
+            }
           }
         }
         if (mounted) setLoading(false);
@@ -201,14 +207,43 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         if (!mounted) return;
+        
+        console.log('Auth state changed:', event, session?.user?.id);
+        
         setSession(session);
         setUser(session?.user ?? null);
+        
         if (session?.user) {
+          // Give the database trigger time to create the profile
           setTimeout(async () => {
             if (!mounted) return;
+            
             let profileData = await fetchProfile(session.user.id);
             let rolesData = await fetchUserRoles(session.user.id);
-            // Always upsert user_roles for all roles
+            
+            // If profile doesn't exist and we have user metadata, create it
+            if (!profileData && session.user.user_metadata) {
+              const { role, full_name } = session.user.user_metadata;
+              if (role && full_name) {
+                console.log('Creating profile from user metadata:', { role, full_name });
+                profileData = await createProfile(
+                  session.user.id,
+                  session.user.email!,
+                  role,
+                  full_name
+                );
+                
+                // Create user_roles entry
+                await supabase.from('user_roles').upsert({
+                  user_id: session.user.id,
+                  role
+                }, { onConflict: 'user_id,role' });
+                
+                rolesData = [role];
+              }
+            }
+            
+            // Always upsert user_roles for consistency
             if (profileData && (!rolesData || rolesData.length === 0)) {
               await supabase.from('user_roles').upsert({
                 user_id: session.user.id,
@@ -216,40 +251,28 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
               }, { onConflict: 'user_id,role' });
               rolesData = [profileData.role];
             }
-            if (!profileData && session.user.user_metadata) {
-              const { role, full_name } = session.user.user_metadata;
-              if (role && full_name) {
-                profileData = await createProfile(
-                  session.user.id,
-                  session.user.email!,
-                  role,
-                  full_name
-                );
-                // Upsert user_roles for new profile
-                await supabase.from('user_roles').upsert({
-                  user_id: session.user.id,
-                  role
-                }, { onConflict: 'user_id,role' });
-                rolesData = [role];
-              }
-            }
+            
             if (mounted) {
               setProfile(profileData);
               setUserRoles(rolesData && rolesData.length > 0 ? rolesData : [profileData?.role].filter(Boolean));
             }
-          }, 0);
+          }, 500); // Wait 500ms for database trigger to complete
         } else {
           setProfile(null);
           setUserRoles([]);
         }
+        
         if (event === 'SIGNED_OUT') {
           setProfile(null);
           setUserRoles([]);
         }
+        
         if (mounted) setLoading(false);
       }
     );
+    
     initializeAuth();
+    
     return () => {
       mounted = false;
       subscription.unsubscribe();
@@ -258,7 +281,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const signUp = async (email: string, password: string, role: UserRoleType, fullName: string) => {
     try {
-      const { error } = await supabase.auth.signUp({
+      console.log('🚀 Starting signup process with selected role:', { email, role, fullName });
+      
+      const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
@@ -269,8 +294,94 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         }
       })
 
-      return { error }
+      if (error) {
+        console.error('❌ Sign up error:', error);
+        return { error }
+      }
+
+      console.log('✅ Sign up successful:', data);
+      console.log('👤 User metadata stored:', data.user?.user_metadata);
+      
+      // If user was created but not confirmed, try to create profile manually as fallback
+      if (data.user && !data.user.email_confirmed_at) {
+        console.log('📝 User created but not confirmed, ensuring profile exists with SELECTED role:', role);
+        
+        // Use the manual profile creation function as fallback with the SELECTED role
+        try {
+          const { data: profileResult, error: profileError } = await supabase.rpc('create_profile_for_user', {
+            user_id: data.user.id,
+            user_email: email,
+            user_role: role, // Make sure we pass the SELECTED role
+            user_full_name: fullName
+          });
+          
+          if (profileError) {
+            console.warn('⚠️ Manual profile creation failed:', profileError);
+            console.log('🔄 Attempting to create profile with direct database call...');
+            
+            // Try direct database insertion as final fallback
+            const { data: directProfile, error: directError } = await supabase
+              .from('profiles')
+              .insert({
+                id: data.user.id,
+                email: email,
+                role: role, // Use the SELECTED role
+                full_name: fullName
+              })
+              .select()
+              .single();
+              
+            if (directError) {
+              console.error('❌ Direct profile creation also failed:', directError);
+            } else {
+              console.log('✅ Direct profile creation successful with role:', role);
+              
+              // Also create user_roles entry
+              await supabase.from('user_roles').insert({
+                user_id: data.user.id,
+                role: role // Use the SELECTED role
+              });
+            }
+          } else {
+            console.log('✅ Manual profile creation successful with role:', role, 'Result:', profileResult);
+          }
+        } catch (profileError) {
+          console.warn('⚠️ Exception during manual profile creation:', profileError);
+        }
+      }
+      
+      // Also try to create profile immediately for confirmed users
+      if (data.user && data.user.email_confirmed_at) {
+        console.log('📝 User confirmed, ensuring profile exists with SELECTED role:', role);
+        
+        // Give a small delay for trigger to complete, then check/create profile
+        setTimeout(async () => {
+          const { data: existingProfile } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', data.user!.id)
+            .single();
+            
+          if (!existingProfile) {
+            console.log('🔄 No profile found, creating with SELECTED role:', role);
+            await supabase.rpc('create_profile_for_user', {
+              user_id: data.user!.id,
+              user_email: email,
+              user_role: role, // SELECTED role
+              user_full_name: fullName
+            });
+          } else {
+            console.log('✅ Profile exists with role:', existingProfile.role);
+            if (existingProfile.role !== role) {
+              console.warn('⚠️ Profile role mismatch! Expected:', role, 'Got:', existingProfile.role);
+            }
+          }
+        }, 100);
+      }
+      
+      return { error: null }
     } catch (error) {
+      console.error('❌ Sign up exception:', error);
       return { error: error as AuthError }
     }
   }

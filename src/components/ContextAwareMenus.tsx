@@ -36,7 +36,7 @@ import {
   Building,
   Search,
   Filter,
-  Sort,
+  ArrowUpDown,
   ArrowUp,
   ArrowDown,
   Home,
@@ -155,11 +155,6 @@ export const PropertyContextMenu = ({
             action: () => console.log('Download PDF')
           }
         ]
-      },
-      {
-        label: 'View on Map',
-        icon: MapPin,
-        action: () => navigate(`/properties?map=true&property=${property.id}`),
       },
       {
         label: 'Similar Properties',
@@ -330,7 +325,7 @@ export const SortFilterMenu = ({
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="outline" size="sm">
-          <Sort className="h-4 w-4 mr-2" />
+          <ArrowUpDown className="h-4 w-4 mr-2" />
           Sort & Filter
           {Object.keys(currentFilters).length > 0 && (
             <Badge variant="secondary" className="ml-2">
@@ -655,11 +650,4 @@ export const SmartSuggestionMenu = ({
   );
 };
 
-export {
-  PropertyContextMenu,
-  SearchContextMenu,
-  SortFilterMenu,
-  LocationQuickActions,
-  UserStateMenu,
-  SmartSuggestionMenu
-}; 
+ 
