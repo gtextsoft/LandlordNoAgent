@@ -216,19 +216,7 @@ const QuickActions = ({ stats, properties = [], onPropertiesUpdate }: QuickActio
       },
       requiresConfirmation: true,
       confirmationMessage: "Are you sure you want to archive the selected properties?",
-    },
-    {
-      title: "Send Bulk Message",
-      description: "Send message to all tenants",
-      icon: Mail,
-      action: async () => {
-        // Implementation for bulk messaging
-        toast({
-          title: "Coming Soon",
-          description: "Bulk messaging feature will be available soon!",
-        });
-      },
-    },
+    }
   ];
 
   // Load real recent activity from database
@@ -274,8 +262,8 @@ const QuickActions = ({ stats, properties = [], onPropertiesUpdate }: QuickActio
 
           activities.push({
             id: `inquiry-${room.id}`,
-            action: `New inquiry from ${room.renter_profile?.full_name || 'Unknown'}`,
-            property: room.properties?.title || 'Unknown Property',
+            action: `New inquiry from ${room.renter_profile?.[0]?.full_name || 'Unknown'}`,
+            property: room.properties?.[0]?.title || 'Unknown Property',
             time: timeStr,
             type: 'inquiry'
           });
@@ -297,8 +285,8 @@ const QuickActions = ({ stats, properties = [], onPropertiesUpdate }: QuickActio
 
               activities.push({
                 id: `message-${msg.id}`,
-                action: `New message from ${room.renter_profile?.full_name || 'Unknown'}`,
-                property: room.properties?.title || 'Unknown Property',
+                action: `New message from ${room.renter_profile?.[0]?.full_name || 'Unknown'}`,
+                property: room.properties?.[0]?.title || 'Unknown Property',
                 time: msgTimeStr,
                 type: 'message'
               });

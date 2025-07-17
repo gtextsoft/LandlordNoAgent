@@ -506,7 +506,7 @@ const PropertyManagement = ({ properties, onToggleStatus, onDelete, onUpdate, lo
               </p>
             </div>
             
-            {/* Bulk Actions */}
+            Bulk Actions
             {selectedProperties.size > 0 && (
               <div className="flex items-center gap-2">
                 <DropdownMenu>

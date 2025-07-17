@@ -78,23 +78,32 @@ const Login = () => {
     return "Very Weak";
   };
 
+  const validRoles: UserRoleType[] = ["renter", "landlord", "admin"];
+
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+
+    // Frontend role validation
+    if (!validRoles.includes(role)) {
+      toast({
+        title: "Invalid Role",
+        description: `Role must be one of: ${validRoles.join(", ")}`,
+        variant: "destructive"
+      });
+      setLoading(false);
+      return;
+    }
 
     try {
       const { error } = await signUp(email, password, role, fullName);
 
       if (error) {
-        if (error.message.includes('already registered')) {
-          toast({
-            title: "Account exists",
-            description: "This email is already registered. Please sign in instead.",
-            variant: "destructive"
-          });
-        } else {
-          throw error;
-        }
+        toast({
+          title: "Error",
+          description: error.message || "Failed to create account. Please try again.",
+          variant: "destructive"
+        });
       } else {
         toast({
           title: "Account created!",
